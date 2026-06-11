@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+.turbo/
+.expo/
+*.log
+
+# env: real values are local-only; commit only the .env.example contract
+.env
+.env.local
+.env.*.local
+
+# Convex writes deployment + generated API here on `convex dev`
+.convex/
+convex/_generated/
+
+# Tauri build artifacts
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/

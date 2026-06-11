@@ -1,0 +1,37 @@
+{
+  "name": "openbook",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Openbook — synced web + mobile + desktop suite on a single Convex Realtime backend",
+  "type": "module",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "concurrently -n convex,web -c magenta,cyan \"pnpm dev:backend\" \"pnpm dev:web\"",
+    "dev:backend": "convex dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile dev",
+    "dev:desktop": "pnpm --filter desktop dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "vitest run",
+    "selfhost": "bash scripts/dev-selfhost.sh",
+    "verify:live": "node scripts/verify-live.mjs",
+    "go-live-check": "bash scripts/go-live-check.sh",
+    "auth:setup": "node node_modules/@convex-dev/auth/dist/cli/index.js"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.1.0",
+    "convex-test": "^0.0.38",
+    "react-router-dom": "^7.17.0",
+    "turbo": "^2.9.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.8"
+  },
+  "dependencies": {
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.92",
+    "convex": "^1.39.0"
+  }
+}

@@ -1,0 +1,6 @@
+# The convex/ backend lives at the repo root (deployed by the Convex CLI).
+# Every client app and the shared package are workspace members so they all
+# resolve the same @openbook/shared source and the same generated API.
+packages:
+  - "apps/*"
+  - "packages/*"
