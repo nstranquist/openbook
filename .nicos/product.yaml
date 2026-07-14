@@ -1,0 +1,26 @@
+schema_version: 1
+id: product.openbook
+name: Openbook (realtime social network)
+surface: products
+kind: product
+status: experimental
+persona: 'Demo/showcase: anyone evaluating the convex-realtime factory lane on a real social domain.'
+jtbd: Prove the scaffold lane carries a full social network — friend graph, audience-scoped feed, reactions, notifications, realtime DMs — with tests at every layer.
+pricing: Free OSS portfolio proof (factory output, not factory source).
+launch: built
+license: MIT
+tags:
+    - social
+    - social-network
+    - convex
+    - react
+    - realtime
+    - scaffold-validation
+    - oss
+checks:
+    - name: publication
+      command:
+        - pnpm
+        - verify:publication
+description: 'Realtime social network on the ndev stack-scaffold convex-realtime lane (web). Profiles + deterministic-hue avatars, friend request lifecycle + mutual-friend suggestions, public/friends audience feed (server-side visibility, cursor pagination), six social reactions with transaction-exact denormalized tallies, inline comments, notifications, realtime DMs with unread accounting, and indexed people search. Scaffold billing spine kept (free tier = 100 posts). Verified locally: typecheck, 27 Convex tests, production build, permissive dependency-license audit, gitleaks, and clean-copy install/build. Prior live E2E evidence records 19/19 over the wire against the self-hosted OSS backend. KB: kb/nicos-knowledge-base/local-dev/openbook-facebook-clone-convex.md'
+portfolio_manifest: portfolio/manifest.yaml
