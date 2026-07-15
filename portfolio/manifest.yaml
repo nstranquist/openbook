@@ -1,8 +1,20 @@
 schema_version: 1
 product_id: product.openbook
 visibility: internal
-reviewed: false
-assets: []
+reviewed: true
+assets:
+    - path: portfolio/assets/realtime-feed.png
+      kind: screenshot
+      alt: Openbook realtime feed with a locally created post
+      caption: The self-hosted Convex feed after a real local signup and post.
+    - path: assets/brand/openbook.svg
+      kind: logo
+      alt: Openbook (realtime social network) application icon
+      provenance: authored-svg
+      copyright_owner: Nico Stranquist
+      generator: catalog-brand-svg/v2
+      concept: social-book
+      score: 100
 case_study:
     enabled: false
     evidence: []
