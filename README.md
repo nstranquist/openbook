@@ -1,10 +1,20 @@
 # Openbook
 
-A full-featured **Facebook clone** on a single **Convex Realtime** backend —
+A full-featured **realtime social network** on a single **Convex Realtime** backend —
 profiles, friend graph, audience-scoped feed, six-reaction posts, comments,
 notifications, and Messenger-style DMs, all live-synced through reactive
 queries (no sockets, no polling). Scaffolded by `ndev stack scaffold`
 (lane: `convex-realtime`), then grown into the real social domain.
+
+## Showcase
+
+<img src="assets/brand/openbook.svg" width="96" height="96" alt="Openbook application icon">
+
+![Openbook realtime feed with a locally created post](portfolio/assets/realtime-feed.png)
+
+This capture comes from the fully local self-hosted Convex stack after a real
+signup and post. It is the reviewed evidence declared in
+`portfolio/manifest.yaml`.
 
 ## Features
 
@@ -33,8 +43,8 @@ openbook/
 │   ├── lib/social.ts       # pairKey · visibility rule · enrichment · notify fan-out
 │   └── social.test.ts      # convex-test suite for every social rule
 ├── packages/shared/        # zod inputs · reaction registry · auth hooks · api re-export
-└── apps/web/               # Vite + React 19 + react-router, Facebook-style UI
-    └── src/ui/openbook.css # FB shell (ob-*) on the garrid OKLCH token spine
+└── apps/web/               # Vite + React 19 + react-router social UI
+    └── src/ui/openbook.css # social shell (ob-*) on the garrid OKLCH token spine
 ```
 
 ## Quick start (fully local, no Convex account)
@@ -47,7 +57,7 @@ CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost   # Docker OSS Convex + key
 
 Or against Convex cloud: `npx convex dev --once && pnpm auth:setup && pnpm dev`.
 
-## Verification (all green as of 2026-06-11)
+## Verification (all green as of 2026-07-13)
 
 | Gate | Command | Result |
 |---|---|---|
@@ -55,7 +65,8 @@ Or against Convex cloud: `npx convex dev --once && pnpm auth:setup && pnpm dev`.
 | Unit (simulated backend) | `pnpm test` | 27/27 (social rules + billing gate + stripe) |
 | Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 19/19 — 3 users over the wire: search → friend → feed visibility → react → comment → notify → DM unread → delete cascade |
 | Browser console | `ndev browser exec <s> console --kind js --fail-on-error` | 0 errors |
-| Production build | `pnpm build` | ✓ (123 kB gzip JS) |
+| Production build | `pnpm build` | ✓ (124 kB gzip JS) |
+| Publication boundary | `pnpm verify:publication` | Go publication-tool tests, types, 27 application tests, build, production dependency licenses, and both secret-scan modes pass |
 
 The live E2E is the same script that verifies a cloud deployment — point
 `VITE_CONVEX_URL` at it and re-run.
@@ -79,3 +90,8 @@ The live E2E is the same script that verifies a cloud deployment — point
 2. Add `query`/`mutation` functions in `convex/` and rules in `convex/lib/social.ts`.
 3. Pin behavior in `convex/social.test.ts` (convex-test, runs in ms).
 4. Consume from the web app via `api` from `@openbook/shared`.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE) and
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
