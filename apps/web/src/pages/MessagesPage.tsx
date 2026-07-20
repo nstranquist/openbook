@@ -120,8 +120,13 @@ export function MessagesPage() {
         <Thread conversationId={conversationId as Id<"conversations">} />
       ) : (
         <div className="ob-msg-thread">
-          <div className="ob-empty" style={{ margin: "auto" }}>
-            Select a chat to start messaging.
+          <div className="ob-empty-cta" style={{ margin: "auto" }}>
+            <p className="ob-bold" style={{ fontSize: 17 }}>
+              Your messages
+            </p>
+            <p className="ob-muted ob-small">
+              Select a conversation, or open a profile and hit Message to start one.
+            </p>
           </div>
         </div>
       )}

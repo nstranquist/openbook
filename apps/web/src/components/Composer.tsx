@@ -1,5 +1,6 @@
 import { api, postInput } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "../ui/garrid";
 import { useState } from "react";
 import { Avatar } from "./Avatar";
 
@@ -29,6 +30,7 @@ export function Composer() {
       await createPost(parsed.data);
       setBody("");
       setOpen(false);
+      toast("Posted", "ok");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not post");
     } finally {
@@ -56,6 +58,14 @@ export function Composer() {
             placeholder={`What's on your mind, ${me.displayName.split(" ")[0]}?`}
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            aria-label="Post body"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setOpen(false);
+                setBody("");
+                setError(null);
+              }
+            }}
           />
           {error && <div className="ob-small" style={{ color: "var(--danger)" }}>{error}</div>}
           <div className="ob-row" style={{ justifyContent: "space-between", marginTop: 8 }}>

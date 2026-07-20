@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "curl-auth-user"
+
+  [[rules.allowlists]]
+  description = "Historical Stripe check passed the runtime secret variable to curl; no credential literal was committed."
+  condition = "AND"
+  regexTarget = "line"
+  regexes = ['''curl -s -u "\$sk:"''']
+  paths = ['''^scripts/go-live-check\.sh$''']

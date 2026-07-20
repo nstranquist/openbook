@@ -13,7 +13,7 @@ export const subscriptionStatusValidator = v.union(
   v.literal("canceled"),
 );
 
-// The six Facebook-style reactions. Stored one row per (post, user); the
+// Six social reactions. Stored one row per (post, user); the
 // denormalized tally lives on the post itself (posts.reactionCounts).
 export const reactionKindValidator = v.union(
   v.literal("like"),

@@ -46,7 +46,7 @@ else
   if [ -z "$price" ]; then
     row "STRIPE_PRICE_PRO" "✗ MISSING"; fail=1
   else
-    resp=$(curl -s -u "$sk:" "https://api.stripe.com/v1/prices/$price" 2>/dev/null)
+    resp=$(curl -s -H "Authorization: Bearer $sk" "https://api.stripe.com/v1/prices/$price" 2>/dev/null)
     if printf '%s' "$resp" | grep -q '"active": *true' && printf '%s' "$resp" | grep -q '"type": *"recurring"'; then
       amount=$(printf '%s' "$resp" | grep -o '"unit_amount": *[0-9]*' | head -1 | grep -o '[0-9]*')
       row "STRIPE_PRICE_PRO" "✓ live: active recurring, \$$(awk "BEGIN{printf \"%.2f\", ${amount:-0}/100}")/period"

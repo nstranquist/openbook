@@ -62,11 +62,11 @@ Or against Convex cloud: `npx convex dev --once && pnpm auth:setup && pnpm dev`.
 | Gate | Command | Result |
 |---|---|---|
 | Types | `pnpm typecheck` | 2/2 packages clean |
-| Unit (simulated backend) | `pnpm test` | 27/27 (social rules + billing gate + stripe) |
+| Unit (simulated backend) | `pnpm test` / `make test` | 28/28 (social rules + billing gate + stripe + suggestion pending exclusion) |
 | Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 19/19 — 3 users over the wire: search → friend → feed visibility → react → comment → notify → DM unread → delete cascade |
 | Browser console | `ndev browser exec <s> console --kind js --fail-on-error` | 0 errors |
-| Production build | `pnpm build` | ✓ (124 kB gzip JS) |
-| Publication boundary | `pnpm verify:publication` | Go publication-tool tests, types, 27 application tests, build, production dependency licenses, and both secret-scan modes pass |
+| Production build | `pnpm build` | ✓ (Vite production bundle) |
+| Publication boundary | `pnpm verify:publication` / `make publish-ready` | Go publication-tool tests, types, 28 application tests, build, production dependency licenses, and both secret-scan modes pass |
 
 The live E2E is the same script that verifies a cloud deployment — point
 `VITE_CONVEX_URL` at it and re-run.

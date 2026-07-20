@@ -81,6 +81,26 @@ function RightRail() {
   );
 }
 
+function FeedSkeleton() {
+  return (
+    <>
+      {[0, 1].map((i) => (
+        <div key={i} className="ob-card ob-skel-card" aria-hidden="true">
+          <div className="ob-skel-row">
+            <div className="ob-skel ob-skel-avatar" />
+            <div className="ob-grow" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="ob-skel ob-skel-line ob-skel-line--short" />
+              <div className="ob-skel ob-skel-line" style={{ width: "28%", height: 10 }} />
+            </div>
+          </div>
+          <div className="ob-skel ob-skel-line ob-skel-line--full ob-skel-line--body" />
+          <div className="ob-skel ob-skel-line ob-skel-line--med ob-skel-line--body" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function FeedPage() {
   const me = useQuery(api.profiles.me);
   const { results, status, loadMore } = usePaginatedQuery(
@@ -94,10 +114,22 @@ export function FeedPage() {
       <div className="ob-stack">
         <Composer />
         {status === "LoadingFirstPage" ? (
-          <div className="ob-card ob-empty">Loading your feed…</div>
+          <div aria-busy="true" aria-label="Loading your feed">
+            <FeedSkeleton />
+          </div>
         ) : results.length === 0 ? (
-          <div className="ob-card ob-empty">
-            Your feed is empty. Post something, or add friends to see their posts.
+          <div className="ob-card ob-empty-cta">
+            <p className="ob-bold" style={{ fontSize: 17 }}>
+              Your feed is waiting
+            </p>
+            <p className="ob-muted ob-small">
+              Post something above, or find people to follow via search and friend suggestions.
+            </p>
+            <div className="ob-empty-actions">
+              <Link to="/friends" className="ob-btn ob-btn--primary">
+                Find friends
+              </Link>
+            </div>
           </div>
         ) : (
           (results as EnrichedPost[]).map((post) => (
@@ -105,11 +137,15 @@ export function FeedPage() {
           ))
         )}
         {status === "CanLoadMore" && (
-          <button className="ob-btn" onClick={() => loadMore(10)}>
+          <button type="button" className="ob-btn" onClick={() => loadMore(10)}>
             Load more
           </button>
         )}
-        {status === "LoadingMore" && <div className="ob-empty ob-small">Loading…</div>}
+        {status === "LoadingMore" && (
+          <div className="ob-empty ob-small" aria-live="polite">
+            Loading more…
+          </div>
+        )}
       </div>
       <RightRail />
     </div>

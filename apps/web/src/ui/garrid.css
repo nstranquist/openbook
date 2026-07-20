@@ -457,6 +457,13 @@ hr, .g-divider {
 }
 .g-stat-delta.up { color: var(--success); }
 .g-stat-delta.down { color: var(--danger); }
+.g-stat-delta.flat { color: var(--fg-tertiary); font-weight: 500; }
+
+/* Horizontal-scroll wrapper for data tables — REQUIRED around g-table on
+ * pages that render on small screens (the columns stay readable and the
+ * card scrolls instead of crushing). */
+.g-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.g-table th { white-space: nowrap; }
 
 /* ============================== badges & pips ============================== */
 .g-badge {
@@ -849,7 +856,7 @@ hr, .g-divider {
   background: var(--bg);
 }
 
-/* the canvas gets a barely-there dot grid — atmosphere, not noise */
+/* the canvas gets a barely-there dot grid — atmosphere, not clutter */
 .g-shell-main {
   grid-area: main;
   overflow-y: auto;

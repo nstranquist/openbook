@@ -29,25 +29,49 @@ interface EnrichedPost {
   myReaction: ReactionKind | null;
 }
 
-function ReactionSummary({ post }: { post: EnrichedPost }) {
+function ReactionSummary({
+  post,
+  onOpenComments,
+}: {
+  post: EnrichedPost;
+  onOpenComments?: () => void;
+}) {
   if (post.reactionTotal === 0 && post.commentCount === 0) return null;
   const top = (Object.entries(post.reactionCounts) as [ReactionKind, number][])
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
-  return (
-    <div className="ob-post-stats">
+  const body = (
+    <>
       <span>
         {top.map(([kind]) => (
-          <span key={kind} style={{ fontSize: 15 }}>{reactionEmoji(kind)}</span>
+          <span key={kind} style={{ fontSize: 15 }} aria-hidden="true">
+            {reactionEmoji(kind)}
+          </span>
         ))}
         {post.reactionTotal > 0 && <span style={{ marginLeft: 4 }}>{post.reactionTotal}</span>}
       </span>
       {post.commentCount > 0 && (
-        <span>{post.commentCount} comment{post.commentCount === 1 ? "" : "s"}</span>
+        <span>
+          {post.commentCount} comment{post.commentCount === 1 ? "" : "s"}
+        </span>
       )}
-    </div>
+    </>
   );
+  // Clicking the summary opens comments when any exist — common social UX.
+  if (onOpenComments && post.commentCount > 0) {
+    return (
+      <button
+        type="button"
+        className="ob-post-stats"
+        onClick={onOpenComments}
+        aria-label={`${post.reactionTotal} reactions, ${post.commentCount} comments. Show comments.`}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <div className="ob-post-stats">{body}</div>;
 }
 
 function Comments({ postId }: { postId: Id<"posts"> }) {
@@ -159,33 +183,44 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
         )}
       </div>
       <p className="ob-post-body">{post.body}</p>
-      <ReactionSummary post={post} />
+      <ReactionSummary
+        post={post}
+        onOpenComments={() => setShowComments(true)}
+      />
       <hr className="ob-divider" style={{ margin: "4px 0" }} />
       <div className="ob-actions">
         <button
+          type="button"
           className={`ob-action${post.myReaction ? " reacted" : ""}`}
           onMouseEnter={() => { disarmHide(); setPickerOpen(true); }}
           onMouseLeave={armHide}
           onClick={() =>
             void toggleReaction({ postId: post._id, kind: post.myReaction ?? "like" })
           }
+          aria-pressed={post.myReaction != null}
+          aria-label={myReactionMeta ? `Reacted: ${myReactionMeta.label}` : "Like"}
         >
           {myReactionMeta ? (
             <>
-              <span>{myReactionMeta.emoji}</span> {myReactionMeta.label}
+              <span aria-hidden="true">{myReactionMeta.emoji}</span> {myReactionMeta.label}
             </>
           ) : (
-            <>👍 Like</>
+            <>
+              <span aria-hidden="true">👍</span> Like
+            </>
           )}
           {pickerOpen && (
             <span
               className="ob-picker"
+              role="toolbar"
+              aria-label="Choose reaction"
               onMouseEnter={disarmHide}
               onMouseLeave={armHide}
             >
               {REACTIONS.map((r) => (
                 <button
                   key={r.kind}
+                  type="button"
                   title={r.label}
                   aria-label={r.label}
                   onClick={(e) => {
@@ -200,8 +235,13 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
             </span>
           )}
         </button>
-        <button className="ob-action" onClick={() => setShowComments((v) => !v)}>
-          💬 Comment
+        <button
+          type="button"
+          className="ob-action"
+          onClick={() => setShowComments((v) => !v)}
+          aria-expanded={showComments}
+        >
+          <span aria-hidden="true">💬</span> Comment
         </button>
       </div>
       {showComments && (

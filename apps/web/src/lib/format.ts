@@ -1,4 +1,4 @@
-// Relative timestamps, Facebook-style: "Just now" → "5m" → "3h" → "2d" → date.
+// Compact relative timestamps: "Just now" → "5m" → "3h" → "2d" → date.
 export function timeAgo(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000);
   if (seconds < 60) return "Just now";

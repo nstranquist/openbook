@@ -2,7 +2,9 @@ import { api, useAuth } from "@openbook/shared";
 import { useQuery, useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { ThemeToggle } from "../ui/garrid";
 import { Avatar } from "./Avatar";
+import { BrandMark } from "./BrandMark";
 import { timeAgo } from "../lib/format";
 
 // The fixed top bar: brand, live people search, section tabs with realtime
@@ -170,6 +172,16 @@ function AccountMenu() {
             <Avatar name={me.displayName} hue={me.avatarHue} size={36} />
             <span className="ob-bold">{me.displayName}</span>
           </button>
+          <button
+            className="ob-menu-item"
+            onClick={() => {
+              setOpen(false);
+              navigate("/settings");
+            }}
+          >
+            <span className="ob-iconbtn" style={{ width: 36, height: 36 }}>⚙️</span>
+            <span className="ob-bold">Settings</span>
+          </button>
           <hr className="ob-divider" />
           <button className="ob-menu-item" onClick={() => void signOut()}>
             <span className="ob-iconbtn" style={{ width: 36, height: 36 }}>⏻</span>
@@ -187,23 +199,44 @@ export function TopNav() {
     <header className="ob-nav">
       <div className="ob-nav-left">
         <Link to="/" className="ob-logo" aria-label="Openbook home">
-          b
+          <BrandMark size={40} alt="" />
         </Link>
         <SearchBox />
       </div>
-      <nav className="ob-nav-center">
-        <NavLink to="/" end className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`} title="Home">
+      <nav className="ob-nav-center" aria-label="Primary">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Home"
+          aria-label="Home"
+        >
           🏠
         </NavLink>
-        <NavLink to="/friends" className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`} title="Friends">
+        <NavLink
+          to="/friends"
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Friends"
+          aria-label="Friends"
+        >
           👥
         </NavLink>
-        <NavLink to="/messages" className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`} title="Messages">
+        <NavLink
+          to="/messages"
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Messages"
+          aria-label={msgUnread > 0 ? `Messages (${msgUnread} unread)` : "Messages"}
+        >
           💬
-          {msgUnread > 0 && <span className="ob-badge-dot">{msgUnread > 9 ? "9+" : msgUnread}</span>}
+          {msgUnread > 0 && (
+            <span className="ob-badge-dot" aria-hidden="true">
+              {msgUnread > 9 ? "9+" : msgUnread}
+            </span>
+          )}
         </NavLink>
       </nav>
       <div className="ob-nav-right">
+        <ThemeToggle />
         <NotificationsBell />
         <AccountMenu />
       </div>

@@ -26,7 +26,13 @@ export function Avatar({
     </span>
   );
   return userId ? (
-    <Link to={`/profile/${userId}`} className="ob-avatar" style={style} title={name}>
+    <Link
+      to={`/profile/${userId}`}
+      className="ob-avatar"
+      style={style}
+      title={name}
+      aria-label={`${name}'s profile`}
+    >
       {initialsOf(name)}
     </Link>
   ) : (

@@ -27,7 +27,7 @@ export const profileInput = z.object({
 });
 export type ProfileInput = z.infer<typeof profileInput>;
 
-// The six Facebook-style reactions, with their display glyphs, in one place.
+// Six social reactions, with their display glyphs, in one place.
 export const REACTIONS = [
   { kind: "like", emoji: "👍", label: "Like" },
   { kind: "love", emoji: "❤️", label: "Love" },

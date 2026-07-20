@@ -1,0 +1,16 @@
+# Declarative shell-health smoke (runs now, no backend needed). Run:
+#   ndev browser open ob
+#   ndev browser script run browserscripts/home-smoke.yaml --session ob
+name: openbook-home-smoke
+session: ob
+steps:
+  - verb: navigate
+    url: "http://localhost:5179/"
+  - verb: wait
+    selector: body
+  - verb: eval                 # value-producing verbs can carry an assert on their result
+    js: "document.title"
+    assert:
+      contains: Openbook
+  - verb: screenshot
+    path: /tmp/openbook-home.png

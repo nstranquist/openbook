@@ -157,6 +157,25 @@ describe("friendship lifecycle", () => {
     // Bob is already a friend — never suggested.
     expect(suggestions.map((s: any) => s.userId)).not.toContain(bob.userId);
   });
+
+  it("suggestions exclude pending request peers (outgoing and incoming)", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const eve = await actor(t, "Eve");
+    const frank = await actor(t, "Frank");
+    // FoF path: Alice—Bob—Eve would otherwise suggest Eve.
+    await befriend(alice, bob);
+    await befriend(bob, eve);
+    // Pending edges should not appear as suggestions either.
+    await alice.as.mutation(api.friends.sendRequest, { userId: frank.userId });
+    await eve.as.mutation(api.friends.sendRequest, { userId: alice.userId });
+    const suggestions = await alice.as.query(api.friends.suggestions, {});
+    const ids = suggestions.map((s: any) => s.userId);
+    expect(ids).not.toContain(frank.userId);
+    expect(ids).not.toContain(eve.userId);
+    expect(ids).not.toContain(bob.userId);
+  });
 });
 
 describe("posts + feed visibility", () => {

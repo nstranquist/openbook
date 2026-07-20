@@ -8,6 +8,7 @@ import { FeedPage } from "./pages/FeedPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { MessagesPage } from "./pages/MessagesPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 // Every authenticated session ensures its profile row exists before the social
 // surface renders — profiles.ensure is idempotent, so this is a cheap no-op
@@ -31,8 +32,9 @@ export function App() {
 
   if (isLoading) {
     return (
-      <div className="ob-landing">
-        <div className="ob-landing-brand">
+      <div className="ob-landing" aria-busy="true" aria-live="polite">
+        <div className="ob-landing-brand ob-landing-loading">
+          <img src="/openbook.svg" width={56} height={56} alt="" className="ob-brand-mark" />
           <h1>openbook</h1>
           <p className="ob-muted">Loading…</p>
         </div>
@@ -52,6 +54,7 @@ export function App() {
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/messages/:conversationId" element={<MessagesPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

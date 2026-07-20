@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { reactionKindValidator } from "./schema";
 import { authorCard, notify, type ReactionKind } from "./lib/social";
 
-// Facebook-style reactions: one row per (post, user). `toggle` is the single
+// Social reactions: one row per (post, user). `toggle` is the single
 // write path — same kind removes, different kind switches — and the post's
 // denormalized tally moves in the same transaction. Only a NEW reaction
 // notifies the post author (switching kinds doesn't re-ping).

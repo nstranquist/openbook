@@ -2,7 +2,8 @@
   "name": "openbook",
   "private": true,
   "version": "0.1.0",
-  "description": "Openbook — synced web + mobile + desktop suite on a single Convex Realtime backend",
+  "license": "MIT",
+  "description": "Openbook — realtime social network (Vite + React web) on a single Convex backend",
   "type": "module",
   "packageManager": "pnpm@9.12.0",
   "scripts": {
@@ -16,6 +17,8 @@
     "test": "vitest run",
     "selfhost": "bash scripts/dev-selfhost.sh",
     "verify:live": "node scripts/verify-live.mjs",
+    "verify:publication": "GO111MODULE=off go test ./tools/... && pnpm typecheck && pnpm test && pnpm build && go run ./tools/license-audit/main.go && gitleaks git --no-banner --redact . && gitleaks dir --no-banner --redact .",
+    "export:publication": "go run ./tools/publication-export/main.go",
     "go-live-check": "bash scripts/go-live-check.sh",
     "auth:setup": "node node_modules/@convex-dev/auth/dist/cli/index.js"
   },

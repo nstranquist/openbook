@@ -1,9 +1,10 @@
 import { useAuth } from "@openbook/shared";
 import { type FormEvent, useState } from "react";
+import { BrandMark } from "./BrandMark";
 
-// The classic split landing: brand statement left, auth card right. Sign-up
-// captures the display name; it's handed to profiles.ensure right after the
-// first authenticated render (see App.tsx EnsureProfile).
+// Split landing: brand statement left, auth card right. Sign-up captures the
+// display name; it's handed to profiles.ensure right after the first
+// authenticated render (see App.tsx EnsureProfile).
 export function SignIn() {
   const { signIn, signUp } = useAuth();
   const [name, setName] = useState("");
@@ -38,13 +39,34 @@ export function SignIn() {
   return (
     <div className="ob-landing">
       <div className="ob-landing-brand">
-        <h1>openbook</h1>
-        <p>Connect with friends and the world around you on Openbook.</p>
-        <p className="ob-muted" style={{ fontSize: 15, marginTop: 12 }}>
-          Realtime feed, reactions, friends and messages — synced live on Convex.
+        <div className="ob-landing-mark">
+          <BrandMark size={64} alt="" />
+          <h1>openbook</h1>
+        </div>
+        <p className="ob-landing-tagline">
+          Connect with friends in realtime — feed, reactions, and messages on one Convex backend.
         </p>
+        <ul className="ob-landing-features" aria-label="Product features">
+          <li>
+            <span aria-hidden="true">⚡</span> Live feed with public &amp; friends visibility
+          </li>
+          <li>
+            <span aria-hidden="true">🤝</span> Friend graph with mutual suggestions
+          </li>
+          <li>
+            <span aria-hidden="true">💬</span> DMs with unread accounting
+          </li>
+          <li>
+            <span aria-hidden="true">🔒</span> Server-enforced trust boundaries
+          </li>
+        </ul>
       </div>
-      <form onSubmit={submit} className="ob-card" style={{ width: 360, display: "flex", flexDirection: "column", gap: 12, padding: 20 }}>
+      <form
+        onSubmit={submit}
+        className="ob-card ob-auth-card"
+        aria-label={flow === "signIn" ? "Log in" : "Sign up"}
+      >
+        <h2 className="ob-auth-title">{flow === "signIn" ? "Log in to Openbook" : "Create your account"}</h2>
         {flow === "signUp" && (
           <input
             className="g-input"
@@ -52,6 +74,8 @@ export function SignIn() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Full name"
             aria-label="Full name"
+            autoComplete="name"
+            disabled={busy}
           />
         )}
         <input
@@ -61,6 +85,9 @@ export function SignIn() {
           placeholder="Email"
           type="email"
           aria-label="Email"
+          autoComplete="email"
+          disabled={busy}
+          required
         />
         <input
           className="g-input"
@@ -69,16 +96,28 @@ export function SignIn() {
           placeholder="Password"
           type="password"
           aria-label="Password"
+          autoComplete={flow === "signIn" ? "current-password" : "new-password"}
+          disabled={busy}
+          required
+          minLength={8}
         />
-        <button type="submit" className="ob-btn ob-btn--primary" disabled={busy} style={{ fontSize: 17, padding: "11px 0" }}>
-          {flow === "signIn" ? "Log in" : "Sign up"}
+        <button
+          type="submit"
+          className="ob-btn ob-btn--primary ob-auth-submit"
+          disabled={busy}
+        >
+          {busy ? "Working…" : flow === "signIn" ? "Log in" : "Sign up"}
         </button>
-        {error && <div className="ob-small" style={{ color: "var(--danger)", textAlign: "center" }}>{error}</div>}
+        {error && (
+          <div className="ob-small ob-auth-error" role="alert">
+            {error}
+          </div>
+        )}
         <hr className="ob-divider" />
         <button
           type="button"
-          className="ob-btn"
-          style={{ background: "var(--success)", color: "white", alignSelf: "center", padding: "11px 16px" }}
+          className="ob-btn ob-auth-switch"
+          disabled={busy}
           onClick={() => {
             setFlow(flow === "signIn" ? "signUp" : "signIn");
             setError(null);
