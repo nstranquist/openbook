@@ -1,23 +1,30 @@
 import { useAuth } from "@openbook/shared";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { BrandMark } from "./BrandMark";
+import { devIdentity, isDevLoginAvailable, useDevAutoLogin } from "../lib/devAutoLogin";
+import { clearSavedLogin, loadSavedLogin, saveLogin } from "../lib/savedLogin";
 
 // Split landing: brand statement left, auth card right. Sign-up captures the
 // display name; it's handed to profiles.ensure right after the first
 // authenticated render (see App.tsx EnsureProfile).
 export function SignIn() {
   const { signIn, signUp } = useAuth();
+  const saved = useRef(loadSavedLogin()).current;
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(saved?.email ?? "");
+  const [password, setPassword] = useState(saved?.password ?? "");
+  const [remember, setRemember] = useState(saved !== null);
+  const [autoSignIn, setAutoSignIn] = useState(saved?.autoSignIn ?? true);
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"form" | "dev" | false>(false);
+  const autoLogin = useDevAutoLogin();
+  const dev = devIdentity();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setBusy(true);
+    setBusy("form");
     try {
       if (flow === "signUp") {
         if (!name.trim()) {
@@ -29,11 +36,45 @@ export function SignIn() {
       } else {
         await signIn(email, password);
       }
+      if (remember) saveLogin({ email, password, autoSignIn });
+      else clearSavedLogin();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function devLogin() {
+    setError(null);
+    setBusy("dev");
+    try {
+      // The throwaway identity needs a display name too, or EnsureProfile has
+      // nothing to hand profiles.ensure on first provision.
+      sessionStorage.setItem("openbook.signupName", "Dev User");
+      try {
+        await signIn(dev.email, dev.password);
+      } catch {
+        await signUp(dev.email, dev.password);
+      }
+      // Persist the throwaway identity too, when asked — otherwise the one-click
+      // path can never be remembered across launches.
+      if (remember) saveLogin({ email: dev.email, password: dev.password, autoSignIn });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Dev sign-in failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (autoLogin.busy) {
+    return (
+      <div className="ob-landing">
+        <p role="status">
+          Signing in as <strong>{autoLogin.email}</strong>…
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -75,7 +116,7 @@ export function SignIn() {
             placeholder="Full name"
             aria-label="Full name"
             autoComplete="name"
-            disabled={busy}
+            disabled={busy !== false}
           />
         )}
         <input
@@ -86,7 +127,7 @@ export function SignIn() {
           type="email"
           aria-label="Email"
           autoComplete="email"
-          disabled={busy}
+          disabled={busy !== false}
           required
         />
         <input
@@ -97,27 +138,47 @@ export function SignIn() {
           type="password"
           aria-label="Password"
           autoComplete={flow === "signIn" ? "current-password" : "new-password"}
-          disabled={busy}
+          disabled={busy !== false}
           required
           minLength={8}
         />
+        <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy !== false} />
+          <span>Remember me on this device</span>
+        </label>
+        {remember && (
+          <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={autoSignIn} onChange={(e) => setAutoSignIn(e.target.checked)} disabled={busy !== false} />
+            <span>Log in automatically on launch</span>
+          </label>
+        )}
         <button
           type="submit"
           className="ob-btn ob-btn--primary ob-auth-submit"
-          disabled={busy}
+          disabled={busy !== false}
         >
-          {busy ? "Working…" : flow === "signIn" ? "Log in" : "Sign up"}
+          {busy === "form" ? "Working…" : flow === "signIn" ? "Log in" : "Sign up"}
         </button>
-        {error && (
+        {isDevLoginAvailable() && (
+          <button
+            type="button"
+            className="ob-btn"
+            disabled={busy !== false}
+            onClick={() => void devLogin()}
+          >
+            {busy === "dev" ? "Working…" : `⚡ Dev login — ${dev.email}`}
+          </button>
+        )}
+        {(error ?? autoLogin.error) && (
           <div className="ob-small ob-auth-error" role="alert">
-            {error}
+            {error ?? autoLogin.error}
           </div>
         )}
         <hr className="ob-divider" />
         <button
           type="button"
           className="ob-btn ob-auth-switch"
-          disabled={busy}
+          disabled={busy !== false}
           onClick={() => {
             setFlow(flow === "signIn" ? "signUp" : "signIn");
             setError(null);
