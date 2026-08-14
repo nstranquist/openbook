@@ -32,11 +32,10 @@ realtime direct messages, unread accounting, and indexed people search. Local
 publication verification passes both Go publication-tool suites, TypeScript
 checks, 28 Convex tests, a production build, dependency-license review, and
 both secret-scan modes.
-The repository also carries a ready-to-run GitHub Actions workflow for that
-same publication gate; it is local evidence until a public run exists.
+Public GitHub Actions CI on `main` runs the same publication gate.
 
 ## Evidence boundary
 
-Openbook is locally prepared for a future MIT repository owned by
-`nstranquist`. No public repository, public CI, deployment, user dataset, or
-production-usage claim is made yet.
+Openbook is public at
+[`nstranquist/openbook`](https://github.com/nstranquist/openbook) under MIT.
+This write-up does not claim a hosted production deployment or a user dataset.

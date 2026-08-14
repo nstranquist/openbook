@@ -1,6 +1,6 @@
 # Openbook publication readiness
 
-Status: **locally cleared; publication remains human-gated**  
+Status: **public source released** (`nstranquist/openbook`).  
 Owner: `nstranquist`  
 Reviewed: 2026-07-13 · re-verified **2026-07-20** (`pnpm verify:publication` + clean export, 93 files)
 
@@ -26,8 +26,7 @@ Reviewed: 2026-07-13 · re-verified **2026-07-20** (`pnpm verify:publication` + 
 - Both Go publication-tool suites, typecheck, 28 Convex tests, production
   build, license audit, and both secret-scan modes pass through
   `pnpm verify:publication`.
-- `.github/workflows/ci.yml` is ready locally and runs the exact publication
-  gate from a full-history checkout; it will activate only after publication.
+- `.github/workflows/ci.yml` runs the publication gate on the public repo.
 - A fresh publication export with one `nstranquist`-owned initial commit passed
   frozen install, the full publication gate, and the durable marker scan on
   2026-07-13. Publish from that reviewed tree, not the older local Git history.
@@ -35,12 +34,7 @@ Reviewed: 2026-07-13 · re-verified **2026-07-20** (`pnpm verify:publication` + 
   `pnpm export:publication -- --out /path/to/empty-directory`; the Go exporter
   rejects in-repository and non-empty destinations and emits a content digest.
 
-## Human-gated publication steps
+## Remaining human gates
 
-1. Review the rendered README and case study.
-2. Create and push a clean public repository under `github.com/nstranquist`.
-3. Confirm the already-defined public CI passes `pnpm verify:publication`.
-4. Complete a signed-out repository review before adding it to GitHub pins.
-
-No public repository, push, profile mutation, visibility change, or deployment
-is authorized by this checklist.
+Deployment and profile-pin changes stay operator-owned. The source repository
+is already public.

@@ -1,7 +1,8 @@
 # Openbook product polish — 2026-07-20
 
-Status: **local polish shipped; `make publish-ready` green**  
-Scope: pre-publish product/docs honesty + UI quality (not public push).
+Status: **local polish shipped; `make publish-ready` green.**  
+Source is public at [`nstranquist/openbook`](https://github.com/nstranquist/openbook).  
+Scope of this note: the 2026-07-20 product/docs honesty + UI pass (no push that day).
 
 ## Changes
 
