@@ -1,12 +1,43 @@
-schema_version: 1
+schema_version: 2
 product_id: product.openbook
-visibility: internal
+visibility: public
 reviewed: true
+presentation:
+    summary: A fully local realtime social-network proof on a self-hosted Convex stack.
+    detail: Exercise profiles, friendship, audience-scoped feeds, reactions, comments, notifications, direct messages, unread accounting, and indexed people search in one tested product.
+    language: TypeScript
+    lane: Realtime full-stack product engineering
+access:
+    profile: web-app
+    primary_action:
+        kind: try
+        label: Run Openbook locally
+        url: https://github.com/nstranquist/openbook#quick-start-fully-local-no-convex-account
+    repository_url: https://github.com/nstranquist/openbook
+    documentation_url: https://github.com/nstranquist/openbook#features
+    feedback_url: https://github.com/nstranquist/openbook/issues/new
+    smoke_argv: [pnpm, build]
+proof:
+    claims:
+        - id: local-realtime-stack
+          statement: The documented quick start runs the web product and its realtime backend without a Convex cloud account.
+          evidence_kind: documentation
+          evidence_url: https://github.com/nstranquist/openbook#quick-start-fully-local-no-convex-account
+        - id: publication-gate
+          statement: The repository defines one publication verification command for type checks, tests, build, license review, and secret scanning.
+          evidence_kind: test
+          evidence_url: https://github.com/nstranquist/openbook#verification-all-green-as-of-2026-07-13
+    boundaries:
+        - The portfolio does not claim a currently deployed public Openbook service.
+        - Fixture and local verification do not prove production traffic or external adoption.
 assets:
     - path: portfolio/assets/realtime-feed.png
       kind: screenshot
       alt: Openbook realtime feed with a locally created post
       caption: The self-hosted Convex feed after a real local signup and post.
+      public: true
+      provenance: local-synthetic-fixture-capture
+      copyright_owner: Nico Stranquist
     - path: assets/brand/openbook.svg
       kind: logo
       alt: Openbook (realtime social network) application icon
