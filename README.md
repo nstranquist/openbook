@@ -35,6 +35,18 @@ signup and post. It is the reviewed evidence declared in
 - **SaaS spine** (from the scaffold) — Stripe-mirrored subscriptions; the free
   tier caps lifetime posts at 100, Pro lifts it (`convex/lib/plans.ts`).
 
+## Usage
+
+| Surface | What you do |
+|---|---|
+| Local stack | `pnpm install` then `pnpm selfhost` and `pnpm dev` (see Quick start) |
+| Cloud | `npx convex dev --once && pnpm auth:setup && pnpm dev` |
+| Tests | `make test` or `pnpm test` (28 unit tests) |
+| Live check | `node scripts/verify-live.mjs` against a running Convex URL |
+| Publish gate | `make publish-ready` |
+
+Accounts, posts, and screenshots in this tree are synthetic. Do not commit live Stripe keys or real user data.
+
 ```
 openbook/
 ├── convex/                 # the backend: schema + social functions + tests
