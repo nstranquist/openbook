@@ -13,7 +13,7 @@ export const list = query({
     if (!me) return [];
     const rows = await ctx.db
       .query("notifications")
-      .withIndex("by_user", (q) => q.eq("userId", me))
+      .withIndex("by_user_created", (q) => q.eq("userId", me))
       .order("desc")
       .take(30);
     return await Promise.all(

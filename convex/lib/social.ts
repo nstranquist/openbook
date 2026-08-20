@@ -110,6 +110,63 @@ export function postVisibleTo(
   return viewerFriendIds.has(post.authorId);
 }
 
+// Load a post only when the viewer may see it. Queries return null;
+// mutations should throw "Post not found" so existence of hidden posts
+// does not leak through a distinct error.
+export async function loadVisiblePost(
+  ctx: QueryCtx | MutationCtx,
+  postId: Id<"posts">,
+  viewerId: Id<"users">,
+): Promise<Doc<"posts"> | null> {
+  const post = await ctx.db.get(postId);
+  if (!post) return null;
+  const friendIds = new Set(await friendIdsOf(ctx, viewerId));
+  if (!postVisibleTo(post, viewerId, friendIds)) return null;
+  return post;
+}
+
+export async function requireVisiblePost(
+  ctx: QueryCtx | MutationCtx,
+  postId: Id<"posts">,
+  viewerId: Id<"users">,
+): Promise<Doc<"posts">> {
+  const post = await loadVisiblePost(ctx, postId, viewerId);
+  if (!post) throw new Error("Post not found");
+  return post;
+}
+
+// pairKey is not a unique index. Two concurrent inserts can land two rows.
+// Keep the oldest document and delete the extras so later .unique() reads
+// do not throw.
+export async function collapseDuplicatePairRows(
+  ctx: MutationCtx,
+  table: "friendships" | "conversations",
+  key: string,
+): Promise<Doc<"friendships"> | Doc<"conversations"> | null> {
+  const rows = await ctx.db
+    .query(table)
+    .withIndex("by_pair", (q) => q.eq("pairKey", key))
+    .collect();
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => a._creationTime - b._creationTime);
+  const keep = rows[0];
+  if (!keep) return null;
+  if (rows.length === 1) return keep;
+  for (const extra of rows.slice(1)) {
+    if (table === "conversations") {
+      const members = await ctx.db
+        .query("conversationMembers")
+        .withIndex("by_conversation_user", (q) =>
+          q.eq("conversationId", extra._id as Id<"conversations">),
+        )
+        .collect();
+      for (const member of members) await ctx.db.delete(member._id);
+    }
+    await ctx.db.delete(extra._id);
+  }
+  return keep;
+}
+
 export interface EnrichedPost {
   _id: Id<"posts">;
   authorId: Id<"users">;

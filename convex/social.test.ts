@@ -210,6 +210,36 @@ describe("posts + feed visibility", () => {
     expect(malloryView.page.map((p: any) => p.body)).toEqual(["hello world"]);
   });
 
+  it("feed scan fills a page when the newest posts are hidden", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    for (let i = 0; i < 5; i++) {
+      await alice.as.mutation(api.posts.create, {
+        body: `secret-${i}`, audience: "friends",
+      });
+    }
+    await alice.as.mutation(api.posts.create, {
+      body: "visible public", audience: "public",
+    });
+    const page = await mallory.as.query(api.posts.feed, {
+      paginationOpts: { numItems: 3, cursor: null },
+    });
+    expect(page.page.map((p: any) => p.body)).toContain("visible public");
+    expect(page.page.map((p: any) => p.body)).not.toContain("secret-0");
+  });
+
+  it("posts.get hides friends-only posts from strangers", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "private", audience: "friends",
+    });
+    expect(await alice.as.query(api.posts.get, { id: postId })).not.toBeNull();
+    expect(await mallory.as.query(api.posts.get, { id: postId })).toBeNull();
+  });
+
   it("feed is newest-first and enriched with author card + my reaction", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
@@ -301,6 +331,19 @@ describe("reactions", () => {
     const notifs = await alice.as.query(api.notifications.list, {});
     expect(notifs.filter((n: any) => n.kind === "reaction")).toHaveLength(1);
   });
+
+  it("strangers cannot react to or list reactions on a friends-only post", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "friends only", audience: "friends",
+    });
+    await expect(
+      mallory.as.mutation(api.reactions.toggle, { postId, kind: "like" }),
+    ).rejects.toThrow(/not found/i);
+    expect(await mallory.as.query(api.reactions.listForPost, { postId })).toEqual([]);
+  });
 });
 
 describe("comments", () => {
@@ -331,6 +374,24 @@ describe("comments", () => {
     const notifs = await alice.as.query(api.notifications.list, {});
     expect(notifs.filter((n: any) => n.kind === "comment")).toHaveLength(2);
   });
+
+  it("friends-only comments are hidden after unfriend", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "friends thread", audience: "friends",
+    });
+    await bob.as.mutation(api.comments.add, { postId, body: "hi" });
+    expect(await bob.as.query(api.comments.list, { postId })).toHaveLength(1);
+
+    await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
+    expect(await bob.as.query(api.comments.list, { postId })).toEqual([]);
+    await expect(
+      bob.as.mutation(api.comments.add, { postId, body: "still here?" }),
+    ).rejects.toThrow(/not found/i);
+  });
 });
 
 describe("notifications", () => {
@@ -352,6 +413,22 @@ describe("notifications", () => {
     // Reads are recipient-scoped: Bob sees none of Alice's notifications.
     expect(await bob.as.query(api.notifications.list, {})).toHaveLength(0);
   });
+
+  it("list is newest-first even after older items are marked read", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const carol = await actor(t, "Carol");
+    await bob.as.mutation(api.friends.sendRequest, { userId: alice.userId });
+    await carol.as.mutation(api.friends.sendRequest, { userId: alice.userId });
+    const list = await alice.as.query(api.notifications.list, {});
+    expect(list[0].actor.displayName).toBe("Carol");
+    await alice.as.mutation(api.notifications.markRead, { id: list[1]._id });
+    const again = await alice.as.query(api.notifications.list, {});
+    expect(again[0].actor.displayName).toBe("Carol");
+    expect(again[0].read).toBe(false);
+    expect(again[1].read).toBe(true);
+  });
 });
 
 describe("messages", () => {
@@ -359,6 +436,7 @@ describe("messages", () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
     const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
 
     const conv1 = await alice.as.mutation(api.messages.open, { userId: bob.userId });
     const conv2 = await bob.as.mutation(api.messages.open, { userId: alice.userId });
@@ -392,6 +470,7 @@ describe("messages", () => {
     const alice = await actor(t, "Alice");
     const bob = await actor(t, "Bob");
     const mallory = await actor(t, "Mallory");
+    await befriend(alice, bob);
     const conv = await alice.as.mutation(api.messages.open, { userId: bob.userId });
     await alice.as.mutation(api.messages.send, { conversationId: conv, body: "secret" });
 
@@ -406,5 +485,14 @@ describe("messages", () => {
     await expect(
       alice.as.mutation(api.messages.open, { userId: alice.userId }),
     ).rejects.toThrow(/yourself/i);
+  });
+
+  it("strangers cannot open a new conversation", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    await expect(
+      mallory.as.mutation(api.messages.open, { userId: alice.userId }),
+    ).rejects.toThrow(/friends/i);
   });
 });

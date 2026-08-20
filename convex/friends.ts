@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   authorCard,
+  collapseDuplicatePairRows,
   friendIdsOf,
   friendshipForPair,
   notify,
@@ -42,13 +43,15 @@ export const sendRequest = mutation({
       }
       throw new Error("Request already sent");
     }
+    const key = pairKey(requesterId, addresseeId);
     const id = await ctx.db.insert("friendships", {
       requesterId,
       addresseeId,
       status: "pending",
-      pairKey: pairKey(requesterId, addresseeId),
+      pairKey: key,
       createdAt: Date.now(),
     });
+    await collapseDuplicatePairRows(ctx, "friendships", key);
     await notify(ctx, {
       userId: addresseeId,
       actorId: requesterId,

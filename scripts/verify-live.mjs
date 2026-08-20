@@ -87,6 +87,23 @@ async function main() {
   check("stranger's feed has the public post", malloryBodies.includes(`public-${stamp}`));
   check("stranger's feed hides the friends-only post", !malloryBodies.includes(`friends-only-${stamp}`));
 
+  let strangerCommentRejected = false;
+  try {
+    await mallory.client.mutation(fn("comments:add"), { postId: friendsPostId, body: "leak" });
+  } catch {
+    strangerCommentRejected = true;
+  }
+  check("stranger cannot comment on a friends-only post", strangerCommentRejected);
+  const leakedComments = await mallory.client.query(fn("comments:list"), { postId: friendsPostId });
+  check("stranger cannot list friends-only comments", leakedComments.length === 0);
+  let strangerReactRejected = false;
+  try {
+    await mallory.client.mutation(fn("reactions:toggle"), { postId: friendsPostId, kind: "like" });
+  } catch {
+    strangerReactRejected = true;
+  }
+  check("stranger cannot react to a friends-only post", strangerReactRejected);
+
   // 6) Reactions + comments, with denormalized tallies + notifications.
   await bob.client.mutation(fn("reactions:toggle"), { postId: friendsPostId, kind: "love" });
   await bob.client.mutation(fn("comments:add"), { postId: friendsPostId, body: "nice post!" });

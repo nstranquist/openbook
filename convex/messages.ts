@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { authorCard, pairKey } from "./lib/social";
+import { areFriends, authorCard, collapseDuplicatePairRows, pairKey } from "./lib/social";
 
 export const MAX_MESSAGE_LENGTH = 4000;
 
@@ -41,6 +41,10 @@ async function getOrCreateConversation(
       unreadCount: 0,
     });
   }
+  const kept = await collapseDuplicatePairRows(ctx, "conversations", key);
+  if (kept && kept._id !== conversationId) {
+    return kept as Doc<"conversations">;
+  }
   return (await ctx.db.get(conversationId))!;
 }
 
@@ -63,6 +67,17 @@ export const open = mutation({
   handler: async (ctx, { userId }) => {
     const me = await getAuthUserId(ctx);
     if (!me) throw new Error("Not authenticated");
+    if (me === userId) throw new Error("You cannot message yourself");
+    const key = pairKey(me, userId);
+    await collapseDuplicatePairRows(ctx, "conversations", key);
+    const existing = await ctx.db
+      .query("conversations")
+      .withIndex("by_pair", (q) => q.eq("pairKey", key))
+      .unique();
+    if (existing) return existing._id;
+    if (!(await areFriends(ctx, me, userId))) {
+      throw new Error("You can only message friends");
+    }
     const conversation = await getOrCreateConversation(ctx, me, userId);
     return conversation._id;
   },

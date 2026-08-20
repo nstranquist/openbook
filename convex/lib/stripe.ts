@@ -9,6 +9,46 @@
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
+function isLocalDevHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+// Checkout/portal return URLs come from the client. Only the deployment
+// origin (SITE_URL) and local dev hosts are allowed, so a signed-in user
+// cannot send Stripe's redirect to an attacker site.
+export function assertSafeReturnUrl(
+  url: string,
+  opts?: { siteUrl?: string },
+): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Return URL is not a valid URL");
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("Return URL must be http or https");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Return URL must not include credentials");
+  }
+  const site = (opts?.siteUrl ?? process.env.SITE_URL ?? "").trim();
+  const allowed = new Set<string>();
+  const siteOrigin = site ? originOf(site) : null;
+  if (siteOrigin) allowed.add(siteOrigin);
+  if (isLocalDevHost(parsed.hostname) && parsed.protocol === "http:") return;
+  if (allowed.has(parsed.origin)) return;
+  throw new Error("Return URL origin is not allowed");
+}
+
 export function stripeSecretKey(): string {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {

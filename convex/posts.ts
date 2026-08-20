@@ -2,14 +2,58 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { PaginationOptions } from "convex/server";
 import { audienceValidator } from "./schema";
 import { effectivePlan, planLimits, assertWithinLimit } from "./lib/plans";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   emptyReactionCounts,
   enrichPost,
   friendIdsOf,
+  loadVisiblePost,
   postVisibleTo,
 } from "./lib/social";
+
+const FEED_SCAN_PAGES = 8;
+
+async function paginateVisiblePosts(
+  ctx: QueryCtx,
+  viewerId: Id<"users">,
+  paginationOpts: PaginationOptions,
+  authorId?: Id<"users">,
+) {
+  const friendIds = new Set(await friendIdsOf(ctx, viewerId));
+  const target = Math.max(1, paginationOpts.numItems);
+  const visible: Doc<"posts">[] = [];
+  let cursor = paginationOpts.cursor;
+  let isDone = false;
+  let continueCursor = cursor ?? "";
+  for (let scan = 0; scan < FEED_SCAN_PAGES && visible.length < target && !isDone; scan++) {
+    const page = authorId
+      ? await ctx.db
+          .query("posts")
+          .withIndex("by_author", (q) => q.eq("authorId", authorId))
+          .order("desc")
+          .paginate({ numItems: target, cursor })
+      : await ctx.db
+          .query("posts")
+          .withIndex("by_created")
+          .order("desc")
+          .paginate({ numItems: target, cursor });
+    for (const post of page.page) {
+      if (postVisibleTo(post, viewerId, friendIds)) visible.push(post);
+    }
+    isDone = page.isDone;
+    continueCursor = page.continueCursor;
+    cursor = page.continueCursor;
+  }
+  return {
+    page: await Promise.all(visible.map((p) => enrichPost(ctx, p, viewerId))),
+    isDone,
+    continueCursor,
+  };
+}
 
 export const MAX_POST_LENGTH = 5000;
 
@@ -50,19 +94,18 @@ export const feed = query({
     const viewerId = await getAuthUserId(ctx);
     if (!viewerId)
       return { page: [], isDone: true, continueCursor: "" };
-    const friendIds = new Set(await friendIdsOf(ctx, viewerId));
-    const page = await ctx.db
-      .query("posts")
-      .withIndex("by_created")
-      .order("desc")
-      .paginate(paginationOpts);
-    const visible = page.page.filter((p) =>
-      postVisibleTo(p, viewerId, friendIds),
-    );
-    return {
-      ...page,
-      page: await Promise.all(visible.map((p) => enrichPost(ctx, p, viewerId))),
-    };
+    return await paginateVisiblePosts(ctx, viewerId, paginationOpts);
+  },
+});
+
+export const get = query({
+  args: { id: v.id("posts") },
+  handler: async (ctx, { id }) => {
+    const viewerId = await getAuthUserId(ctx);
+    if (!viewerId) return null;
+    const post = await loadVisiblePost(ctx, id, viewerId);
+    if (!post) return null;
+    return await enrichPost(ctx, post, viewerId);
   },
 });
 
@@ -77,19 +120,7 @@ export const forProfile = query({
     const viewerId = await getAuthUserId(ctx);
     if (!viewerId)
       return { page: [], isDone: true, continueCursor: "" };
-    const friendIds = new Set(await friendIdsOf(ctx, viewerId));
-    const page = await ctx.db
-      .query("posts")
-      .withIndex("by_author", (q) => q.eq("authorId", userId))
-      .order("desc")
-      .paginate(paginationOpts);
-    const visible = page.page.filter((p) =>
-      postVisibleTo(p, viewerId, friendIds),
-    );
-    return {
-      ...page,
-      page: await Promise.all(visible.map((p) => enrichPost(ctx, p, viewerId))),
-    };
+    return await paginateVisiblePosts(ctx, viewerId, paginationOpts, userId);
   },
 });
 

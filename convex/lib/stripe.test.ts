@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flattenForm, verifyStripeSignature } from "./stripe";
+import { assertSafeReturnUrl, flattenForm, verifyStripeSignature } from "./stripe";
 
 // Pure-function coverage for the Stripe REST/webhook primitives. No network and
 // no Convex db — these are the load-bearing crypto + encoding paths a wrong edit
@@ -49,5 +49,28 @@ describe("verifyStripeSignature", () => {
   it("rejects a malformed header", async () => {
     expect(await verifyStripeSignature(payload, "garbage", secret)).toBe(false);
     expect(await verifyStripeSignature(payload, "t=123", secret)).toBe(false);
+  });
+});
+
+describe("assertSafeReturnUrl", () => {
+  const site = "https://openbook.example";
+  it("allows the deployment origin and local http hosts", () => {
+    expect(() =>
+      assertSafeReturnUrl("https://openbook.example/?billing=success", { siteUrl: site }),
+    ).not.toThrow();
+    expect(() =>
+      assertSafeReturnUrl("http://127.0.0.1:5173/?billing=success", { siteUrl: site }),
+    ).not.toThrow();
+  });
+  it("rejects an attacker origin", () => {
+    expect(() =>
+      assertSafeReturnUrl("https://evil.example/phish", { siteUrl: site }),
+    ).toThrow(/not allowed/i);
+  });
+  it("rejects javascript and credentialed URLs", () => {
+    expect(() => assertSafeReturnUrl("javascript:alert(1)", { siteUrl: site })).toThrow();
+    expect(() =>
+      assertSafeReturnUrl("https://user:pass@openbook.example/", { siteUrl: site }),
+    ).toThrow(/credentials/i);
   });
 });

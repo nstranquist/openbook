@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
+  assertSafeReturnUrl,
   createCheckoutSession,
   createBillingPortalSession,
   stripeProPriceId,
@@ -23,6 +24,8 @@ export const createCheckout = action({
   handler: async (ctx, args): Promise<{ url: string }> => {
     const ctxInfo = await ctx.runQuery(internal.billing.billingContext, {});
     if (!ctxInfo.userId) throw new Error("Not authenticated");
+    assertSafeReturnUrl(args.successUrl);
+    assertSafeReturnUrl(args.cancelUrl);
     const session = await createCheckoutSession({
       priceId: stripeProPriceId(),
       successUrl: args.successUrl,
@@ -45,6 +48,7 @@ export const createPortal = action({
     if (!ctxInfo.stripeCustomerId) {
       throw new Error("No Stripe customer yet — start a checkout first");
     }
+    assertSafeReturnUrl(args.returnUrl);
     const session = await createBillingPortalSession({
       stripeCustomerId: ctxInfo.stripeCustomerId,
       returnUrl: args.returnUrl,

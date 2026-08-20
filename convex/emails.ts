@@ -1,6 +1,6 @@
 "use node";
 
-import { action } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 
 // Provider-agnostic transactional email for Openbook. Pick your provider
@@ -11,8 +11,9 @@ import { v } from "convex/values";
 //   npx convex env set EMAIL_PROVIDER smtp     # + SMTP_HOST/... (npm i nodemailer)
 //
 // This runs in Convex's Node runtime ("use node") so SES/SMTP clients load
-// lazily — you only install the one you choose. Call it from any mutation/action
-// via ctx.runAction(api.emails.sendEmail, { to, subject, html }).
+// lazily — you only install the one you choose. The action is internal: a
+// browser client cannot call it. Call it from a trusted mutation/action
+// via ctx.runAction(internal.emails.sendEmail, { to, subject, html }).
 
 const FROM = process.env.EMAIL_FROM || "Openbook <onboarding@resend.dev>";
 
@@ -68,7 +69,7 @@ async function deliver(to: string, subject: string, html?: string, text?: string
   }
 }
 
-export const sendEmail = action({
+export const sendEmail = internalAction({
   args: {
     to: v.string(),
     subject: v.string(),

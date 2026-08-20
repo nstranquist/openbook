@@ -116,7 +116,9 @@ export default defineSchema({
     postId: v.optional(v.id("posts")),
     read: v.boolean(),
     createdAt: v.number(),
-  }).index("by_user", ["userId", "read"]),
+  })
+    .index("by_user", ["userId", "read"])
+    .index("by_user_created", ["userId", "createdAt"]),
 
   // Direct messages. One conversation per user pair (pairKey, like friendships);
   // unread tallies are denormalized per member and reset by markRead.

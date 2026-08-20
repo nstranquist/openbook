@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { authorCard, notify } from "./lib/social";
+import { authorCard, notify, requireVisiblePost, loadVisiblePost } from "./lib/social";
 
 export const MAX_COMMENT_LENGTH = 2000;
 
@@ -17,8 +17,7 @@ export const add = mutation({
     if (!trimmed) throw new Error("Comment cannot be empty");
     if (trimmed.length > MAX_COMMENT_LENGTH)
       throw new Error(`Comment too long (max ${MAX_COMMENT_LENGTH})`);
-    const post = await ctx.db.get(postId);
-    if (!post) throw new Error("Post not found");
+    const post = await requireVisiblePost(ctx, postId, authorId);
     const id = await ctx.db.insert("comments", {
       postId,
       authorId,
@@ -41,6 +40,7 @@ export const list = query({
   handler: async (ctx, { postId }) => {
     const viewerId = await getAuthUserId(ctx);
     if (!viewerId) return [];
+    if (!(await loadVisiblePost(ctx, postId, viewerId))) return [];
     const rows = await ctx.db
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", postId))
@@ -66,12 +66,16 @@ export const remove = mutation({
     const comment = await ctx.db.get(id);
     if (!comment) return;
     const post = await ctx.db.get(comment.postId);
-    if (comment.authorId !== userId && post?.authorId !== userId)
+    if (!post) {
+      await ctx.db.delete(id);
+      return;
+    }
+    await requireVisiblePost(ctx, comment.postId, userId);
+    if (comment.authorId !== userId && post.authorId !== userId)
       throw new Error("Not allowed to delete this comment");
     await ctx.db.delete(id);
-    if (post)
-      await ctx.db.patch(post._id, {
-        commentCount: Math.max(0, post.commentCount - 1),
-      });
+    await ctx.db.patch(post._id, {
+      commentCount: Math.max(0, post.commentCount - 1),
+    });
   },
 });
