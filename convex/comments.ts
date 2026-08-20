@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { authorCard, notify, requireVisiblePost, loadVisiblePost } from "./lib/social";
+import { authorCard, loadVisiblePost, notify, requireActiveUser, requireVisiblePost } from "./lib/social";
 import { takeRate } from "./lib/rate";
 
 export const MAX_COMMENT_LENGTH = 2000;
@@ -12,8 +12,7 @@ export const MAX_COMMENT_LENGTH = 2000;
 export const add = mutation({
   args: { postId: v.id("posts"), body: v.string() },
   handler: async (ctx, { postId, body }) => {
-    const authorId = await getAuthUserId(ctx);
-    if (!authorId) throw new Error("Not authenticated");
+    const authorId = await requireActiveUser(ctx);
     const trimmed = body.trim();
     if (!trimmed) throw new Error("Comment cannot be empty");
     if (trimmed.length > MAX_COMMENT_LENGTH)
@@ -72,9 +71,11 @@ export const remove = mutation({
       await ctx.db.delete(id);
       return;
     }
-    await requireVisiblePost(ctx, comment.postId, userId);
-    if (comment.authorId !== userId && post.authorId !== userId)
+    const isAuthor = comment.authorId === userId;
+    const isPostOwner = post.authorId === userId;
+    if (!isAuthor && !isPostOwner)
       throw new Error("Not allowed to delete this comment");
+    if (isPostOwner && !isAuthor) await requireVisiblePost(ctx, comment.postId, userId);
     await ctx.db.delete(id);
     await ctx.db.patch(post._id, {
       commentCount: Math.max(0, post.commentCount - 1),

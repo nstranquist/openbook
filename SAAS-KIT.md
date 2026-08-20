@@ -8,7 +8,7 @@ Pro removes the cap. The plan panel lives on the Settings page.
 
 | Piece | Files | What it does |
 |---|---|---|
-| **Auth** | `convex/auth.ts` | Password sign-in. GitHub/Google providers are listed so an operator can set `AUTH_GITHUB_*` / `AUTH_GOOGLE_*`; they are not shown in the UI today. |
+| **Auth** | `convex/auth.ts` | Password sign-in. GitHub/Google buttons are on the login card; they work when `AUTH_GITHUB_*` / `AUTH_GOOGLE_*` are set. Password reset is registered only when `RESEND_API_KEY` is set. |
 | **Stripe billing** | `convex/billing.ts`, `convex/lib/stripe.ts`, `convex/http.ts` | Checkout + portal + a signature-verified webhook → `subscriptions`. Return URLs must match `SITE_URL` or a local http host. |
 | **Plan gating** | `convex/lib/plans.ts` | `effectivePlan` + `assertWithinLimit`. Free: 100 posts. Pro: unlimited. |
 | **Billing UI** | `apps/web/src/components/BillingPanel.tsx` | Mounted on Settings. Without Stripe keys, Upgrade surfaces the setup error. |

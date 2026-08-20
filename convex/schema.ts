@@ -45,8 +45,8 @@ export default defineSchema({
   ...authTables,
 
   // Public-facing identity. One row per user, created on first session
-  // (profiles.ensure). Avatars/covers are deterministic hues, not uploads,
-  // so the whole app self-hosts with zero file storage.
+  // (profiles.ensure). Avatars/covers are deterministic hues. Post photos
+  // use Convex file storage (posts.imageId).
   profiles: defineTable({
     userId: v.id("users"),
     displayName: v.string(),
@@ -184,4 +184,13 @@ export default defineSchema({
     windowStart: v.number(),
     count: v.number(),
   }).index("by_user_action", ["userId", "action"]),
+
+  uploads: defineTable({
+    storageId: v.id("_storage"),
+    userId: v.id("users"),
+    used: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_user", ["userId"]),
 });

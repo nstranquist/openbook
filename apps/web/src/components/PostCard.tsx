@@ -244,7 +244,7 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
               <button className="ob-btn ob-btn--sm" onClick={() => setEditing(false)}>Cancel</button>
               <button
                 className="ob-btn ob-btn--primary"
-                disabled={!editBody.trim()}
+                disabled={!editBody.trim() && !post.imageUrl}
                 onClick={() =>
                   void runOrToast(
                     updatePost({ id: post._id, body: editBody, audience: editAudience }),

@@ -30,7 +30,11 @@ export function useAuth(): {
       await signIn(provider);
     },
     requestPasswordReset: async (email) => {
-      await signIn("password", { email, flow: "reset" });
+      try {
+        await signIn("password", { email, flow: "reset" });
+      } catch {
+        // Same response whether the email exists or mail is unset.
+      }
     },
     confirmPasswordReset: async (email, code, newPassword) => {
       await signIn("password", {

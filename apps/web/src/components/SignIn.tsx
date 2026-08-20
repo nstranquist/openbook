@@ -36,7 +36,7 @@ export function SignIn() {
       } else if (flow === "reset") {
         await requestPasswordReset(email);
         setFlow("resetVerify");
-        setError(null);
+        setError("If that account exists, we sent a reset code.");
         setBusy(false);
         return;
       } else if (flow === "resetVerify") {

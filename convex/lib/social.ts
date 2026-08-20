@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
@@ -82,6 +83,16 @@ export async function friendIdsOf(
     ...sent.map((f) => f.addresseeId),
     ...received.map((f) => f.requesterId),
   ];
+}
+
+export async function requireActiveUser(
+  ctx: QueryCtx | MutationCtx,
+): Promise<Id<"users">> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) throw new Error("Not authenticated");
+  const profile = await profileOf(ctx, userId);
+  if (profile?.deletedAt) throw new Error("This account is closed");
+  return userId;
 }
 
 export async function profileOf(

@@ -57,6 +57,9 @@ export function assertSafeReturnUrl(
     return;
   }
   if (siteOrigin && parsed.origin === siteOrigin) return;
+  if (!site) {
+    throw new Error("Set SITE_URL on the deployment for checkout return URLs");
+  }
   throw new Error("Return URL origin is not allowed");
 }
 

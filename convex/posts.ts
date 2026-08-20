@@ -15,10 +15,9 @@ import {
   isBlockedEitherWay,
   loadVisiblePost,
   postVisibleTo,
+  requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
-
-const FEED_SCAN_PAGES = 8;
 
 async function paginateVisiblePosts(
   ctx: QueryCtx,
@@ -36,32 +35,39 @@ async function paginateVisiblePosts(
   const friendIds = new Set(friendList);
   const target = Math.max(1, paginationOpts.numItems);
   const visible: Doc<"posts">[] = [];
-  let cursor = paginationOpts.cursor;
-  let isDone = false;
-  let continueCursor = cursor ?? "";
-  for (let scan = 0; scan < FEED_SCAN_PAGES && visible.length < target && !isDone; scan++) {
-    const page = authorId
-      ? await ctx.db
-          .query("posts")
-          .withIndex("by_author", (q) => q.eq("authorId", authorId))
-          .order("desc")
-          .paginate({ numItems: target, cursor })
-      : await ctx.db
-          .query("posts")
-          .withIndex("by_created")
-          .order("desc")
-          .paginate({ numItems: target, cursor });
-    for (const post of page.page) {
-      if (postVisibleTo(post, viewerId, friendIds, blockedIds)) visible.push(post);
-    }
-    isDone = page.isDone;
-    continueCursor = page.continueCursor;
-    cursor = page.continueCursor;
+  const cursorTime = paginationOpts.cursor ? Number(paginationOpts.cursor) : null;
+  const batchSize = Math.max(target * 4, 40);
+  const raw = authorId
+    ? await ctx.db
+        .query("posts")
+        .withIndex("by_author", (q) => q.eq("authorId", authorId))
+        .order("desc")
+        .take(batchSize)
+    : await ctx.db
+        .query("posts")
+        .withIndex("by_created", (q) =>
+          cursorTime === null ? q : q.lt("createdAt", cursorTime),
+        )
+        .order("desc")
+        .take(batchSize);
+  let visibleCount = 0;
+  for (const post of raw) {
+    if (cursorTime !== null && post.createdAt >= cursorTime) continue;
+    if (!postVisibleTo(post, viewerId, friendIds, blockedIds)) continue;
+    visibleCount += 1;
+    if (visible.length < target) visible.push(post);
   }
+  const lastIncluded = visible[visible.length - 1];
+  const lastRaw = raw[raw.length - 1];
+  const exhausted = raw.length < batchSize;
   return {
     page: await Promise.all(visible.map((p) => enrichPost(ctx, p, viewerId))),
-    isDone,
-    continueCursor,
+    isDone: exhausted && visibleCount <= target,
+    continueCursor: lastIncluded
+      ? String(lastIncluded.createdAt)
+      : lastRaw && !exhausted
+        ? String(lastRaw.createdAt)
+        : "",
   };
 }
 
@@ -85,9 +91,32 @@ async function assertImage(
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireActiveUser(ctx);
+    await takeRate(ctx, userId, "upload");
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const registerImage = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    const userId = await requireActiveUser(ctx);
+    await assertImage(ctx, storageId);
+    const existing = await ctx.db
+      .query("uploads")
+      .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+      .first();
+    if (existing) {
+      if (existing.userId !== userId) throw new Error("Image not found");
+      return storageId;
+    }
+    await ctx.db.insert("uploads", {
+      storageId,
+      userId,
+      used: false,
+      createdAt: Date.now(),
+    });
+    return storageId;
   },
 });
 
@@ -98,13 +127,22 @@ export const create = mutation({
     imageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, { body, audience, imageId }) => {
-    const authorId = await getAuthUserId(ctx);
-    if (!authorId) throw new Error("Not authenticated");
+    const authorId = await requireActiveUser(ctx);
     const trimmed = body.trim();
     if (!trimmed && !imageId) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
-    if (imageId) await assertImage(ctx, imageId);
+    if (imageId) {
+      await assertImage(ctx, imageId);
+      const upload = await ctx.db
+        .query("uploads")
+        .withIndex("by_storage", (q) => q.eq("storageId", imageId))
+        .first();
+      if (!upload || upload.userId !== authorId || upload.used) {
+        throw new Error("Image not found");
+      }
+      await ctx.db.patch(upload._id, { used: true });
+    }
     await takeRate(ctx, authorId, "post");
     // Plan gate (SaaS spine): the free tier caps lifetime posts; Pro is
     // unlimited. Reads the effective plan so a lapsed sub downgrades correctly.
@@ -146,12 +184,11 @@ export const update = mutation({
     audience: v.optional(audienceValidator),
   },
   handler: async (ctx, { id, body, audience }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireActiveUser(ctx);
     const post = await ctx.db.get(id);
     if (!post || post.authorId !== userId) throw new Error("Post not found");
     const trimmed = body.trim();
-    if (!trimmed) throw new Error("Post cannot be empty");
+    if (!trimmed && !post.imageId) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
     const patch: {
@@ -198,8 +235,7 @@ export const forProfile = query({
 export const remove = mutation({
   args: { id: v.id("posts") },
   handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireActiveUser(ctx);
     const post = await ctx.db.get(id);
     if (!post) return;
     if (post.authorId !== userId)

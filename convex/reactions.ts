@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { reactionKindValidator } from "./schema";
-import { authorCard, loadVisiblePost, notify, requireVisiblePost, type ReactionKind } from "./lib/social";
+import { authorCard, loadVisiblePost, notify, requireActiveUser, requireVisiblePost, type ReactionKind } from "./lib/social";
 
 // Social reactions: one row per (post, user). `toggle` is the single
 // write path — same kind removes, different kind switches — and the post's
@@ -12,8 +12,7 @@ import { authorCard, loadVisiblePost, notify, requireVisiblePost, type ReactionK
 export const toggle = mutation({
   args: { postId: v.id("posts"), kind: reactionKindValidator },
   handler: async (ctx, { postId, kind }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireActiveUser(ctx);
     const post = await requireVisiblePost(ctx, postId, userId);
     const counts = { ...post.reactionCounts } as Record<ReactionKind, number>;
     const existing = await ctx.db

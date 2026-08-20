@@ -11,6 +11,7 @@ export function Composer() {
   const me = useQuery(api.profiles.me);
   const createPost = useMutation(api.posts.create);
   const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
+  const registerImage = useMutation(api.posts.registerImage);
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<"public" | "friends">("public");
@@ -20,6 +21,15 @@ export function Composer() {
   const [busy, setBusy] = useState(false);
 
   if (!me) return null;
+
+  function resetComposer() {
+    if (preview) URL.revokeObjectURL(preview);
+    setBody("");
+    setImageId(null);
+    setPreview(null);
+    setError(null);
+    setOpen(false);
+  }
 
   async function submit() {
     if (!body.trim() && !imageId) {
@@ -35,10 +45,7 @@ export function Composer() {
     setError(null);
     try {
       await createPost({ ...parsed.data, imageId: imageId ?? undefined });
-      setBody("");
-      setImageId(null);
-      setPreview(null);
-      setOpen(false);
+      resetComposer();
       toast("Posted", "ok");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not post");
@@ -69,11 +76,7 @@ export function Composer() {
             onChange={(e) => setBody(e.target.value)}
             aria-label="Post body"
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setOpen(false);
-                setBody("");
-                setError(null);
-              }
+              if (e.key === "Escape") resetComposer();
             }}
           />
           {preview && (
@@ -120,6 +123,7 @@ export function Composer() {
                         });
                         if (!res.ok) throw new Error("Upload failed");
                         const json = (await res.json()) as { storageId: Id<"_storage"> };
+                        await registerImage({ storageId: json.storageId });
                         setImageId(json.storageId);
                       } catch (err) {
                         setPreview(null);
@@ -129,7 +133,7 @@ export function Composer() {
                   }}
                 />
               </label>
-              <button className="ob-btn ob-btn--sm" onClick={() => { setOpen(false); setBody(""); setImageId(null); setPreview(null); setError(null); }}>
+              <button className="ob-btn ob-btn--sm" onClick={() => resetComposer()}>
                 Cancel
               </button>
               <button

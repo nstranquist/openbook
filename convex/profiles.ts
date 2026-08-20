@@ -71,8 +71,8 @@ export const view = query({
         .collect();
       const iBlocked = blocked.some((row) => row.blockerId === viewerId);
       const theyBlocked = blocked.some((row) => row.blockerId === userId);
+      if (theyBlocked) return null;
       if (iBlocked) relationship = "blocked";
-      else if (theyBlocked) relationship = "blocked_by";
       else {
         const edge = await friendshipForPair(ctx, viewerId, userId);
         if (edge?.status === "accepted") relationship = "friends";
@@ -152,6 +152,12 @@ export const deleteAccount = mutation({
     if (!me) throw new Error("Not authenticated");
     const profile = await profileOf(ctx, me);
     if (!profile || profile.deletedAt) return;
+
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", me))
+      .collect();
+    for (const session of sessions) await ctx.db.delete(session._id);
 
     const posts = await ctx.db
       .query("posts")

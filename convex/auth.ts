@@ -4,9 +4,11 @@ import GitHub from "@auth/core/providers/github";
 import Google from "@auth/core/providers/google";
 import { convexAuth } from "@convex-dev/auth/server";
 
-const resetEmail = Email({
+const resendKey = process.env.RESEND_API_KEY;
+const resetEmail = resendKey
+  ? Email({
   id: "password-reset",
-  apiKey: process.env.RESEND_API_KEY ?? "unset",
+  apiKey: resendKey,
   async sendVerificationRequest({
     identifier,
     token,
@@ -16,7 +18,7 @@ const resetEmail = Email({
   }) {
     const key = process.env.RESEND_API_KEY;
     if (!key) {
-      throw new Error("Password reset is not configured (set RESEND_API_KEY)");
+      throw new Error("Password reset is not configured");
     }
     const from = process.env.EMAIL_FROM || "Openbook <onboarding@resend.dev>";
     const res = await fetch("https://api.resend.com/emails", {
@@ -31,7 +33,8 @@ const resetEmail = Email({
     });
     if (!res.ok) throw new Error(`reset email: HTTP ${res.status}`);
   },
-});
+})
+  : undefined;
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [

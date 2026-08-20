@@ -6,14 +6,14 @@ import {
   deleteNotificationsBetween,
   friendshipForPair,
   pairKey,
+  requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
 
 export const set = mutation({
   args: { userId: v.id("users"), blocked: v.boolean() },
   handler: async (ctx, { userId, blocked }) => {
-    const me = await getAuthUserId(ctx);
-    if (!me) throw new Error("Not authenticated");
+    const me = await requireActiveUser(ctx);
     if (me === userId) throw new Error("You cannot block yourself");
     const other = await ctx.db.get(userId);
     if (!other) throw new Error("User not found");
@@ -23,9 +23,9 @@ export const set = mutation({
       .query("blocks")
       .withIndex("by_blocker", (q) => q.eq("blockerId", me))
       .collect();
-    const existing = mine.find((row) => row.blockedId === userId) ?? null;
+    const existingRows = mine.filter((row) => row.blockedId === userId);
     if (blocked) {
-      if (!existing) {
+      if (existingRows.length === 0) {
         await ctx.db.insert("blocks", {
           blockerId: me,
           blockedId: userId,
@@ -39,7 +39,7 @@ export const set = mutation({
       await deleteNotificationsBetween(ctx, userId, me);
       return;
     }
-    if (existing) await ctx.db.delete(existing._id);
+    for (const row of existingRows) await ctx.db.delete(row._id);
   },
 });
 

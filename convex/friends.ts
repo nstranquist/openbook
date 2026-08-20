@@ -12,6 +12,7 @@ import {
   isBlockedEitherWay,
   notify,
   pairKey,
+  requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
 
@@ -22,8 +23,7 @@ import { takeRate } from "./lib/rate";
 export const sendRequest = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId: addresseeId }) => {
-    const requesterId = await getAuthUserId(ctx);
-    if (!requesterId) throw new Error("Not authenticated");
+    const requesterId = await requireActiveUser(ctx);
     if (requesterId === addresseeId)
       throw new Error("You cannot friend yourself");
     const addressee = await ctx.db.get(addresseeId);
@@ -213,6 +213,7 @@ export const suggestions = query({
       const recent = await ctx.db.query("profiles").order("desc").take(24);
       for (const p of recent) {
         if (picks.length >= 8) break;
+        if (p.deletedAt) continue;
         if (excluded.has(p.userId)) continue;
         if (picks.some((x) => x.userId === p.userId)) continue;
         picks.push({ userId: p.userId, mutualCount: 0 });

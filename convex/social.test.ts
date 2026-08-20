@@ -619,6 +619,9 @@ describe("post edit and account close", () => {
     await alice.as.mutation(api.profiles.deleteAccount, {});
     expect(await bob.as.query(api.profiles.view, { userId: alice.userId })).toBeNull();
     expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
+    await expect(
+      alice.as.mutation(api.posts.create, { body: "still here", audience: "public" }),
+    ).rejects.toThrow(/closed/i);
   });
 });
 

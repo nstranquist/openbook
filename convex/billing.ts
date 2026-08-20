@@ -11,6 +11,7 @@ import {
 import { planValidator, subscriptionStatusValidator } from "./schema";
 import { effectivePlan, planLimits } from "./lib/plans";
 import type { Id } from "./_generated/dataModel";
+import { profileOf } from "./lib/social";
 
 // Billing wires Stripe (TEST mode) against the schema-ready subscriptions table.
 // Flow: dashboard calls billing.createCheckout → Stripe-hosted Checkout → user
@@ -163,7 +164,11 @@ export const userExists = internalQuery({
   args: { userId: v.string() },
   handler: async (ctx, { userId }) => {
     try {
-      return !!(await ctx.db.get(userId as Id<"users">));
+      const user = await ctx.db.get(userId as Id<"users">);
+      if (!user) return false;
+      const profile = await profileOf(ctx, userId as Id<"users">);
+      if (profile?.deletedAt) return false;
+      return true;
     } catch {
       return false;
     }
