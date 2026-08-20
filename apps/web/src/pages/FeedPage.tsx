@@ -117,7 +117,9 @@ export function FeedPage() {
     if (status === "CanLoadMore" && results.length === 0) loadMore(10);
   }, [status, results.length, loadMore]);
   const empty = results.length === 0 && status === "Exhausted";
-  const loading = status === "LoadingFirstPage" || (results.length === 0 && status === "CanLoadMore");
+  const loading =
+    status === "LoadingFirstPage" ||
+    (results.length === 0 && status !== "Exhausted");
   return (
     <div className="ob-grid">
       <LeftRail />
@@ -146,7 +148,7 @@ export function FeedPage() {
             <PostCard key={post._id} post={post} isMine={post.author.userId === me?.userId} />
           ))
         )}
-        {status === "CanLoadMore" && (
+        {status === "CanLoadMore" && results.length > 0 && (
           <button type="button" className="ob-btn" onClick={() => loadMore(10)}>
             Load more
           </button>

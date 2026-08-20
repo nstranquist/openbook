@@ -144,6 +144,8 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
   const [pickerPinned, setPickerPinned] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
+  const suppressClick = useRef(false);
 
   function armHide() {
     if (pickerPinned) return;
@@ -154,6 +156,7 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
   }
   function pinPicker() {
     disarmHide();
+    longPressFired.current = true;
     setPickerPinned(true);
     setPickerOpen(true);
   }
@@ -211,24 +214,30 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           onMouseEnter={() => { disarmHide(); setPickerOpen(true); }}
           onMouseLeave={armHide}
           onTouchStart={() => {
+            longPressFired.current = false;
             longPress.current = setTimeout(pinPicker, 450);
           }}
           onTouchEnd={() => {
             if (longPress.current) clearTimeout(longPress.current);
+            if (longPressFired.current) suppressClick.current = true;
           }}
           onContextMenu={(e) => {
             e.preventDefault();
             pinPicker();
           }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown" || e.key === " ") {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                pinPicker();
-              }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              pinPicker();
             }
           }}
-          onClick={() => react(post.myReaction ?? "like")}
+          onClick={() => {
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              return;
+            }
+            react(post.myReaction ?? "like");
+          }}
           aria-pressed={post.myReaction != null}
           aria-haspopup="true"
           aria-expanded={pickerOpen}

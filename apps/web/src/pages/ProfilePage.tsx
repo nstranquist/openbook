@@ -1,6 +1,6 @@
 import { api, profileInput, type Id } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { runOrToast } from "../lib/run";
 import { Avatar } from "../components/Avatar";
@@ -179,6 +179,12 @@ export function ProfilePage() {
     userId ? { userId: id } : "skip",
     { initialNumItems: 10 },
   );
+  useEffect(() => {
+    if (status === "CanLoadMore" && results.length === 0) loadMore(10);
+  }, [status, results.length, loadMore]);
+  const postsEmpty = results.length === 0 && status === "Exhausted";
+  const postsLoading =
+    status === "LoadingFirstPage" || (results.length === 0 && status !== "Exhausted");
 
   if (profile === undefined) return <div className="ob-empty">Loading profile…</div>;
   if (profile === null) return <div className="ob-empty">This profile does not exist.</div>;
@@ -236,16 +242,16 @@ export function ProfilePage() {
             <>
               <AboutCard profile={profile} />
               {profile.isMe && <Composer />}
-              {status === "LoadingFirstPage" ? (
+              {postsLoading ? (
                 <div className="ob-card ob-empty">Loading posts…</div>
-              ) : results.length === 0 ? (
+              ) : postsEmpty ? (
                 <div className="ob-card ob-empty">No posts to show.</div>
               ) : (
                 (results as EnrichedPost[]).map((post) => (
                   <PostCard key={post._id} post={post} isMine={post.author.userId === me?.userId} />
                 ))
               )}
-              {status === "CanLoadMore" && (
+              {status === "CanLoadMore" && results.length > 0 && (
                 <button className="ob-btn" onClick={() => loadMore(10)}>Load more</button>
               )}
             </>

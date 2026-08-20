@@ -31,6 +31,7 @@ CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost
 2. **Tallies** (`reactionCounts`, `commentCount`) update in the same mutation as the child row.
 3. **Notifications never self-ping**; reaction kind switches do not re-notify.
 4. **One row per pair** for friendships and conversations (`pairKey`).
+   Mutations collapse duplicates; do not use `.unique()` on `by_pair`.
 
 ## Publication
 

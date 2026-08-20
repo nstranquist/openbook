@@ -42,6 +42,7 @@ else
     *) row "STRIPE_SECRET_KEY" "✗ not a Stripe secret key"; fail=1;;
   esac
   if have STRIPE_WEBHOOK_SECRET; then row "STRIPE_WEBHOOK_SECRET" "✓ set"; else row "STRIPE_WEBHOOK_SECRET" "✗ MISSING (register the webhook endpoint, then set it)"; fail=1; fi
+  if have SITE_URL; then row "SITE_URL" "✓ $SITE_URL"; else row "SITE_URL" "✗ MISSING (npx convex env set SITE_URL <app origin> — checkout return URLs)"; fail=1; fi
   price="${STRIPE_PRICE_PRO:-}"
   if [ -z "$price" ]; then
     row "STRIPE_PRICE_PRO" "✗ MISSING"; fail=1

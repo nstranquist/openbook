@@ -94,7 +94,8 @@ The live E2E is the same script that verifies a cloud deployment — point
 - **Notifications never self-ping** — `notify()` drops actor==recipient, and
   switching a reaction kind doesn't re-notify.
 - **One row per pair** — friendships and conversations are keyed by a sorted
-  `pairKey`, making request/accept and DM-open idempotent by construction.
+  `pairKey`. Mutations collapse duplicates (accepted / latest thread wins) so
+  request/accept and DM-open stay idempotent even without a unique index.
 
 ## Adding to the model
 
