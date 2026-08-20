@@ -4,8 +4,7 @@ import { auth } from "./auth";
 import { internal } from "./_generated/api";
 import { verifyStripeSignature, stripeWebhookSecret } from "./lib/stripe";
 
-// Wire Convex Auth's HTTP routes (token exchange, OAuth callbacks) so every
-// client platform shares the same auth endpoints.
+// Wire Convex Auth's HTTP routes (token exchange, OAuth callbacks).
 const http = httpRouter();
 auth.addHttpRoutes(http);
 

@@ -23,7 +23,7 @@ Reviewed: 2026-07-13 · re-verified **2026-07-20** (`pnpm verify:publication` + 
   checkout to typecheck and test before any Convex deployment is provisioned.
 - Facebook/Meta comparative branding was removed from product copy and source
   comments. No Facebook or Meta code, logos, images, or assets are present.
-- Both Go publication-tool suites, typecheck, 28 Convex tests, production
+- Both Go publication-tool suites, typecheck, Convex tests, production
   build, license audit, and both secret-scan modes pass through
   `pnpm verify:publication`.
 - `.github/workflows/ci.yml` runs the publication gate on the public repo.

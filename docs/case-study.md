@@ -14,8 +14,8 @@ test harness, live verification scripts, and independently buildable UI layer.
 
 ## Key decisions
 
-- Enforce public-versus-friends visibility on the server rather than filtering
-  private posts only in the browser.
+- Enforce public-versus-friends visibility on the server for post body,
+  comments, and reactions — not only the feed list.
 - Keep reaction tallies transactionally consistent with one reaction row per
   user and post.
 - Model notifications and message unread state as realtime backend data so
@@ -28,9 +28,10 @@ test harness, live verification scripts, and independently buildable UI layer.
 
 The application implements profiles, friend requests and suggestions, an
 audience-scoped paginated feed, six reactions, comments, notifications,
-realtime direct messages, unread accounting, and indexed people search. Local
+realtime direct messages, unread accounting, and indexed people search.
+Comments and reactions use the same visibility rule as the feed. Local
 publication verification passes both Go publication-tool suites, TypeScript
-checks, 28 Convex tests, a production build, dependency-license review, and
+checks, 37 Convex tests, a production build, dependency-license review, and
 both secret-scan modes.
 Public GitHub Actions CI on `main` runs the same publication gate.
 

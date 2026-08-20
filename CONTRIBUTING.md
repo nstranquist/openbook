@@ -7,7 +7,7 @@ human-gated.
 
 ```sh
 pnpm install
-make test                 # 28 convex-test social + billing unit tests
+make test                 # convex-test social + billing unit tests
 make verify               # typecheck + test + build
 # Optional live backend:
 CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost
@@ -26,7 +26,8 @@ CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost
 
 ## Domain rules (read before changing feed/friends/DMs)
 
-1. **Visibility** lives in `postVisibleTo` — both feed and profile filters use it.
+1. **Visibility** lives in `postVisibleTo`. Feed, profile, `posts.get`,
+   comments, and reactions all use it.
 2. **Tallies** (`reactionCounts`, `commentCount`) update in the same mutation as the child row.
 3. **Notifications never self-ping**; reaction kind switches do not re-notify.
 4. **One row per pair** for friendships and conversations (`pairKey`).

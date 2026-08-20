@@ -10,8 +10,6 @@
     "dev": "concurrently -n convex,web -c magenta,cyan \"pnpm dev:backend\" \"pnpm dev:web\"",
     "dev:backend": "convex dev",
     "dev:web": "pnpm --filter web dev",
-    "dev:mobile": "pnpm --filter mobile dev",
-    "dev:desktop": "pnpm --filter desktop dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",

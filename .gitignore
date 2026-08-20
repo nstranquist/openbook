@@ -2,7 +2,6 @@ node_modules/
 dist/
 build/
 .turbo/
-.expo/
 *.log
 
 # env: real values are local-only; commit only the .env.example contract
@@ -13,7 +12,3 @@ build/
 # Convex deployment state is local. The generated API is committed so a clean
 # checkout can typecheck and test without provisioning a deployment first.
 .convex/
-
-# Tauri build artifacts
-apps/desktop/src-tauri/target/
-apps/desktop/src-tauri/gen/

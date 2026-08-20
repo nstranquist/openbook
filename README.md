@@ -27,10 +27,11 @@ signup and post. It is the reviewed evidence declared in
 - **Reactions** — the classic six (👍❤️😆😮😢😡), one per user per post,
   hover picker, denormalized tallies kept exact in the same transaction.
 - **Comments** — inline threads with exact counts and owner/author delete rights.
+  Comment and reaction APIs use the same visibility rule as the feed.
 - **Notifications** — bell with unread badge for friend requests, accepts,
   reactions, and comments; mark-read / mark-all-read.
-- **Messages** — per-pair conversations, realtime delivery, unread accounting,
-  read receipts, conversation previews.
+- **Messages** — friends-only threads, realtime delivery, unread accounting,
+  conversation previews. Existing threads stay readable after unfriend.
 - **People search** — full-text search index over display names, live from the nav bar.
 - **SaaS spine** (from the scaffold) — Stripe-mirrored subscriptions; the free
   tier caps lifetime posts at 100, Pro lifts it (`convex/lib/plans.ts`).
@@ -41,7 +42,7 @@ signup and post. It is the reviewed evidence declared in
 |---|---|
 | Local stack | `pnpm install` then `pnpm selfhost` and `pnpm dev` (see Quick start) |
 | Cloud | `npx convex dev --once && pnpm auth:setup && pnpm dev` |
-| Tests | `make test` or `pnpm test` (28 unit tests) |
+| Tests | `make test` or `pnpm test` |
 | Live check | `node scripts/verify-live.mjs` against a running Convex URL |
 | Publish gate | `make publish-ready` |
 
@@ -69,25 +70,24 @@ CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost   # Docker OSS Convex + key
 
 Or against Convex cloud: `npx convex dev --once && pnpm auth:setup && pnpm dev`.
 
-## Verification (all green as of 2026-07-13)
+## Verification (unit + types as of 2026-08-20)
 
 | Gate | Command | Result |
 |---|---|---|
 | Types | `pnpm typecheck` | 2/2 packages clean |
-| Unit (simulated backend) | `pnpm test` / `make test` | 28/28 (social rules + billing gate + stripe + suggestion pending exclusion) |
-| Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 19/19 — 3 users over the wire: search → friend → feed visibility → react → comment → notify → DM unread → delete cascade |
-| Browser console | `ndev browser exec <s> console --kind js --fail-on-error` | 0 errors |
-| Production build | `pnpm build` | ✓ (Vite production bundle) |
-| Publication boundary | `pnpm verify:publication` / `make publish-ready` | Go publication-tool tests, types, 28 application tests, build, production dependency licenses, and both secret-scan modes pass |
+| Unit (simulated backend) | `pnpm test` / `make test` | 37/37 (social rules, visibility on comments/reactions, feed fill, billing, Stripe) |
+| Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 22 checks — 3 users over the wire: search → friend → feed visibility → stranger cannot comment/react → react → comment → notify → DM unread → delete cascade |
+| Production build | `pnpm build` | Vite production bundle |
+| Publication boundary | `pnpm verify:publication` / `make publish-ready` | Go publication-tool tests, types, application tests, build, production dependency licenses, and both secret-scan modes |
 
 The live E2E is the same script that verifies a cloud deployment — point
 `VITE_CONVEX_URL` at it and re-run.
 
 ## Domain rules worth knowing
 
-- **Visibility lives in one function** — `lib/social.ts::postVisibleTo`; both
-  `posts.feed` and `posts.forProfile` filter server-side, so a hidden post
-  never reaches a client.
+- **Visibility lives in one function** — `lib/social.ts::postVisibleTo`. Feed,
+  profile, `posts.get`, comments, and reactions all use it, so a hidden post
+  never reaches a client and cannot be commented on or reacted to.
 - **Tallies are denormalized but exact** — `reactionCounts`/`commentCount`
   move in the same mutation transaction as the child row; tests pin add /
   switch / remove arithmetic.

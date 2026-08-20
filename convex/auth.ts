@@ -3,16 +3,12 @@ import GitHub from "@auth/core/providers/github";
 import Google from "@auth/core/providers/google";
 import { convexAuth } from "@convex-dev/auth/server";
 
-// One auth surface for the whole suite. The same identity, sessions, and tokens
-// are consumed identically by web, mobile, and desktop via @openbook/shared.
+// Password sign-in is the product surface. GitHub and Google stay in the
+// provider list so an operator can set AUTH_GITHUB_* / AUTH_GOOGLE_* without a
+// code change; they are not shown in the web UI until that work is done.
 //
-// Providers:
-//   - Password: email + password (no external dependency).
-//   - GitHub / Google: OAuth. Credentials come from the deployment env
-//     (AUTH_GITHUB_ID/SECRET, AUTH_GOOGLE_ID/SECRET), set via `convex env set`;
-//     @auth/core reads them by convention, so listing the provider is all that's
-//     needed. The OAuth callback routes are added by auth.addHttpRoutes (http.ts).
-//     A deployment with no OAuth env still works — password sign-in is unaffected.
+// A deployment with no OAuth env still works — password sign-in is unaffected.
+// OAuth callback routes are added by auth.addHttpRoutes (http.ts).
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password, GitHub, Google],
 });
