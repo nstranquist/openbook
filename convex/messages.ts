@@ -4,7 +4,15 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { areFriends, authorCard, collapseDuplicatePairRows, pairKey } from "./lib/social";
+import {
+  areFriends,
+  authorCard,
+  blockedPairIds,
+  collapseDuplicatePairRows,
+  isBlockedEitherWay,
+  pairKey,
+} from "./lib/social";
+import { takeRate } from "./lib/rate";
 
 export const MAX_MESSAGE_LENGTH = 4000;
 
@@ -67,6 +75,9 @@ export const open = mutation({
     if (me === userId) throw new Error("You cannot message yourself");
     const key = pairKey(me, userId);
     const existing = await collapseDuplicatePairRows(ctx, "conversations", key);
+    if (await isBlockedEitherWay(ctx, me, userId)) {
+      throw new Error("You cannot message this user");
+    }
     if (existing) return existing._id;
     if (!(await areFriends(ctx, me, userId))) {
       throw new Error("You can only message friends");
@@ -88,6 +99,11 @@ export const send = mutation({
     const conversation = await ctx.db.get(conversationId);
     if (!conversation || !conversation.participantIds.includes(me))
       throw new Error("Not a participant of this conversation");
+    const otherId = conversation.participantIds.find((id) => id !== me);
+    if (otherId && (await isBlockedEitherWay(ctx, me, otherId))) {
+      throw new Error("You cannot message this user");
+    }
+    await takeRate(ctx, me, "message");
     const now = Date.now();
     const id = await ctx.db.insert("messages", {
       conversationId,
@@ -120,6 +136,7 @@ export const myConversations = query({
   handler: async (ctx) => {
     const me = await getAuthUserId(ctx);
     if (!me) return [];
+    const blocked = await blockedPairIds(ctx, me);
     const memberships = await ctx.db
       .query("conversationMembers")
       .withIndex("by_user", (q) => q.eq("userId", me))
@@ -130,7 +147,7 @@ export const myConversations = query({
         const conversation = await ctx.db.get(m.conversationId);
         if (!conversation) return null;
         const otherId = conversation.participantIds.find((p) => p !== me);
-        if (!otherId) return null;
+        if (!otherId || blocked.has(otherId)) return null;
         return {
           conversationId: conversation._id,
           other: await authorCard(ctx, otherId),

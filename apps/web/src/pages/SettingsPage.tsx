@@ -1,9 +1,58 @@
-import { api, useAuth } from "@openbook/shared";
+import { api, useAuth, type Id } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { ThemeToggle, toast } from "../ui/garrid";
 import { Avatar } from "../components/Avatar";
 import { BillingPanel } from "../components/BillingPanel";
+import { runOrToast } from "../lib/run";
+
+function BlockedList() {
+  const blocked = useQuery(api.blocks.list);
+  const setBlock = useMutation(api.blocks.set);
+  if (!blocked || blocked.length === 0) return null;
+  return (
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-card-title">Blocked</div>
+      <div className="g-hint">They cannot see your posts or send friend requests.</div>
+      {blocked.map((row) => (
+        <div key={row.userId} className="g-spread" style={{ marginTop: "var(--space-3)" }}>
+          <span className="ob-row" style={{ gap: 8 }}>
+            <Avatar name={row.displayName} hue={row.avatarHue} size={32} userId={row.userId} />
+            <span className="ob-bold">{row.displayName}</span>
+          </span>
+          <button
+            className="g-btn g-btn--sm"
+            onClick={() => void runOrToast(setBlock({ userId: row.userId as Id<"users">, blocked: false }), "Could not unblock")}
+          >
+            Unblock
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DeleteAccountButton() {
+  const del = useMutation(api.profiles.deleteAccount);
+  const { signOut } = useAuth();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="g-btn g-btn--danger"
+      disabled={busy}
+      onClick={() => {
+        if (!confirm("Close this account permanently?")) return;
+        setBusy(true);
+        void runOrToast(del({}), "Could not close account").then(async (ok) => {
+          setBusy(false);
+          if (ok !== undefined) await signOut();
+        });
+      }}
+    >
+      {busy ? "Working…" : "Close account"}
+    </button>
+  );
+}
 
 // SettingsPage — a real, backend-wired settings surface: profile edit (→
 // profiles.update), appearance (DS ThemeToggle), and account/danger-zone.
@@ -91,6 +140,8 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <BlockedList />
+
       <div className="g-card" style={{ marginTop: "var(--space-5)", borderColor: "color-mix(in oklch, var(--danger), transparent 60%)" }}>
         <div className="g-spread">
           <div>
@@ -98,6 +149,13 @@ export function SettingsPage() {
             <div className="g-hint">Sign out of openbook on this device.</div>
           </div>
           <button className="g-btn g-btn--danger" onClick={() => void signOut()}>Log out</button>
+        </div>
+        <div className="g-spread" style={{ marginTop: "var(--space-4)" }}>
+          <div>
+            <div className="g-card-title">Close account</div>
+            <div className="g-hint">Deletes your posts, comments, and friend graph. This cannot be undone.</div>
+          </div>
+          <DeleteAccountButton />
         </div>
       </div>
     </main>

@@ -32,6 +32,8 @@ CONVEX_PORT=3310 CONVEX_SITE_PORT=3311 pnpm selfhost
 3. **Notifications never self-ping**; reaction kind switches do not re-notify.
 4. **One row per pair** for friendships and conversations (`pairKey`).
    Mutations collapse duplicates; do not use `.unique()` on `by_pair`.
+5. **Blocks** hide posts and new friend/DM writes in both directions.
+6. Write paths go through `takeRate` (posts, comments, messages, requests).
 
 ## Publication
 

@@ -56,6 +56,7 @@ export default defineSchema({
     avatarHue: v.number(), // 0-360, derived once at creation
     coverHue: v.number(),
     joinedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .searchIndex("search_name", { searchField: "displayName" }),
@@ -67,6 +68,7 @@ export default defineSchema({
     body: v.string(),
     audience: audienceValidator,
     createdAt: v.number(),
+    editedAt: v.optional(v.number()),
     commentCount: v.number(),
     reactionCounts: reactionCountsValidator,
   })
@@ -78,7 +80,9 @@ export default defineSchema({
     authorId: v.id("users"),
     body: v.string(),
     createdAt: v.number(),
-  }).index("by_post", ["postId"]),
+  })
+    .index("by_post", ["postId"])
+    .index("by_author", ["authorId"]),
 
   // One row per (post, user); changing your reaction rewrites the row.
   reactions: defineTable({
@@ -87,7 +91,8 @@ export default defineSchema({
     kind: reactionKindValidator,
   })
     .index("by_post", ["postId"])
-    .index("by_post_user", ["postId", "userId"]),
+    .index("by_post_user", ["postId", "userId"])
+    .index("by_user", ["userId"]),
 
   // Friend graph. One row per pair for the whole lifecycle:
   // pending (requester → addressee) then accepted. Declining deletes the row.
@@ -118,7 +123,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_user", ["userId", "read"])
-    .index("by_user_created", ["userId", "createdAt"]),
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_user_actor", ["userId", "actorId"])
+    .index("by_actor", ["actorId"]),
 
   // Direct messages. One conversation per user pair (pairKey, like friendships);
   // unread tallies are denormalized per member and reset by markRead.
@@ -159,4 +166,21 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_stripe_subscription", ["stripeSubscriptionId"]),
+
+  blocks: defineTable({
+    blockerId: v.id("users"),
+    blockedId: v.id("users"),
+    pairKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_pair", ["pairKey"])
+    .index("by_blocker", ["blockerId"])
+    .index("by_blocked", ["blockedId"]),
+
+  rateLimits: defineTable({
+    userId: v.id("users"),
+    action: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  }).index("by_user_action", ["userId", "action"]),
 });

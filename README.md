@@ -20,10 +20,13 @@ signup and post. It is the reviewed evidence declared in
 
 - **Identity** — Convex Auth (email+password), auto-provisioned profile with
   deterministic-hue avatar/cover (zero file storage), editable bio/work/location.
+  Settings can close the account (wipes posts and the friend graph).
 - **Friend graph** — request → accept lifecycle (decline / cancel / unfriend),
-  cross-request auto-accept, and *People You May Know* ranked by mutual friends.
+  cross-request auto-accept, *People You May Know* ranked by mutual friends,
+  and block/unblock (hides posts and blocks new requests in both directions).
 - **Feed** — paginated, newest-first, server-side visibility: `friends`-audience
-  posts reach only the author's friends; `public` posts reach everyone.
+  posts reach only the author's friends; `public` posts reach everyone. Authors
+  can edit a post (body + audience). Write paths are rate-limited.
 - **Reactions** — the classic six (👍❤️😆😮😢😡), one per user per post,
   hover picker, denormalized tallies kept exact in the same transaction.
 - **Comments** — inline threads with exact counts and owner/author delete rights.

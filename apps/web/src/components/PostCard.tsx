@@ -23,6 +23,7 @@ interface EnrichedPost {
   body: string;
   audience: "public" | "friends";
   createdAt: number;
+  editedAt?: number | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -140,6 +141,10 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
   const toggleReaction = useMutation(api.reactions.toggle);
   const removePost = useMutation(api.posts.remove);
   const [showComments, setShowComments] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(post.body);
+  const [editAudience, setEditAudience] = useState(post.audience);
+  const updatePost = useMutation(api.posts.update);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerPinned, setPickerPinned] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,24 +189,78 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           </Link>
           <div className="ob-muted ob-small">
             {timeAgo(post.createdAt)} · {post.audience === "public" ? "🌐" : "👥"}
+            {post.editedAt ? " · Edited" : ""}
           </div>
         </div>
         {isMine && (
-          <button
-            className="ob-iconbtn"
-            title="Delete post"
-            aria-label="Delete post"
-            onClick={() => {
-              if (confirm("Delete this post?")) {
-                void runOrToast(removePost({ id: post._id }), "Could not delete post");
-              }
-            }}
-          >
-            🗑
-          </button>
+          <span className="ob-row" style={{ gap: 4 }}>
+            <button
+              className="ob-iconbtn"
+              title="Edit post"
+              aria-label="Edit post"
+              onClick={() => {
+                setEditBody(post.body);
+                setEditAudience(post.audience);
+                setEditing((v) => !v);
+              }}
+            >
+              ✏️
+            </button>
+            <button
+              className="ob-iconbtn"
+              title="Delete post"
+              aria-label="Delete post"
+              onClick={() => {
+                if (confirm("Delete this post?")) {
+                  void runOrToast(removePost({ id: post._id }), "Could not delete post");
+                }
+              }}
+            >
+              🗑
+            </button>
+          </span>
         )}
       </div>
-      <p className="ob-post-body">{post.body}</p>
+      {editing && isMine ? (
+        <div className="ob-reveal">
+          <textarea
+            className="ob-textarea"
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            aria-label="Edit post body"
+          />
+          <div className="ob-row" style={{ justifyContent: "space-between", marginTop: 8 }}>
+            <select
+              className="ob-select"
+              value={editAudience}
+              onChange={(e) => setEditAudience(e.target.value as "public" | "friends")}
+              aria-label="Who can see this post"
+            >
+              <option value="public">🌐 Public</option>
+              <option value="friends">👥 Friends</option>
+            </select>
+            <span className="ob-row" style={{ gap: 8 }}>
+              <button className="ob-btn ob-btn--sm" onClick={() => setEditing(false)}>Cancel</button>
+              <button
+                className="ob-btn ob-btn--primary"
+                disabled={!editBody.trim()}
+                onClick={() =>
+                  void runOrToast(
+                    updatePost({ id: post._id, body: editBody, audience: editAudience }),
+                    "Could not save",
+                  ).then((ok) => {
+                    if (ok !== undefined) setEditing(false);
+                  })
+                }
+              >
+                Save
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="ob-post-body">{post.body}</p>
+      )}
       <ReactionSummary
         post={post}
         onOpenComments={() => setShowComments(true)}

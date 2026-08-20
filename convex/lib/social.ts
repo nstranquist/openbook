@@ -113,14 +113,66 @@ export async function authorCard(
   };
 }
 
+export async function blockedPairIds(
+  ctx: QueryCtx | MutationCtx,
+  viewerId: Id<"users">,
+): Promise<Set<Id<"users">>> {
+  const out = new Set<Id<"users">>();
+  const asBlocker = await ctx.db
+    .query("blocks")
+    .withIndex("by_blocker", (q) => q.eq("blockerId", viewerId))
+    .collect();
+  const asBlocked = await ctx.db
+    .query("blocks")
+    .withIndex("by_blocked", (q) => q.eq("blockedId", viewerId))
+    .collect();
+  for (const row of asBlocker) out.add(row.blockedId);
+  for (const row of asBlocked) out.add(row.blockerId);
+  return out;
+}
+
+export async function isBlockedEitherWay(
+  ctx: QueryCtx | MutationCtx,
+  a: Id<"users">,
+  b: Id<"users">,
+): Promise<boolean> {
+  if (a === b) return false;
+  const rows = await ctx.db
+    .query("blocks")
+    .withIndex("by_pair", (q) => q.eq("pairKey", pairKey(a, b)))
+    .collect();
+  return rows.length > 0;
+}
+
+export async function deleteNotificationsBetween(
+  ctx: MutationCtx,
+  recipientId: Id<"users">,
+  actorId: Id<"users">,
+  kinds?: Array<"friend_request" | "friend_accept" | "reaction" | "comment">,
+): Promise<void> {
+  const rows = await ctx.db
+    .query("notifications")
+    .withIndex("by_user_actor", (q) =>
+      q.eq("userId", recipientId).eq("actorId", actorId),
+    )
+    .collect();
+  for (const row of rows) {
+    if (kinds && !kinds.includes(row.kind)) continue;
+    await ctx.db.delete(row._id);
+  }
+}
+
 // Visibility rule, in one place: public posts are visible to everyone;
 // friends-audience posts to the author and their accepted friends.
+// A block in either direction hides the author's posts from the viewer.
 export function postVisibleTo(
   post: Doc<"posts">,
   viewerId: Id<"users">,
   viewerFriendIds: Set<Id<"users">>,
+  blockedIds?: Set<Id<"users">>,
 ): boolean {
   if (post.authorId === viewerId) return true;
+  if (blockedIds?.has(post.authorId)) return false;
   if (post.audience === "public") return true;
   return viewerFriendIds.has(post.authorId);
 }
@@ -135,8 +187,11 @@ export async function loadVisiblePost(
 ): Promise<Doc<"posts"> | null> {
   const post = await ctx.db.get(postId);
   if (!post) return null;
-  const friendIds = new Set(await friendIdsOf(ctx, viewerId));
-  if (!postVisibleTo(post, viewerId, friendIds)) return null;
+  const [friendIds, blockedIds] = await Promise.all([
+    friendIdsOf(ctx, viewerId),
+    blockedPairIds(ctx, viewerId),
+  ]);
+  if (!postVisibleTo(post, viewerId, new Set(friendIds), blockedIds)) return null;
   return post;
 }
 
@@ -241,6 +296,7 @@ export interface EnrichedPost {
   body: string;
   audience: "public" | "friends";
   createdAt: number;
+  editedAt: number | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -270,6 +326,7 @@ export async function enrichPost(
     body: post.body,
     audience: post.audience,
     createdAt: post.createdAt,
+    editedAt: post.editedAt ?? null,
     commentCount: post.commentCount,
     reactionCounts: counts,
     reactionTotal,

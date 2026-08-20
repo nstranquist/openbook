@@ -4,12 +4,16 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
   authorCard,
+  blockedPairIds,
   collapseDuplicatePairRows,
+  deleteNotificationsBetween,
   friendIdsOf,
   friendshipForPair,
+  isBlockedEitherWay,
   notify,
   pairKey,
 } from "./lib/social";
+import { takeRate } from "./lib/rate";
 
 // Friend-graph lifecycle. One friendships row per pair: pending → accepted,
 // or deleted (decline/cancel/unfriend). Every transition fans out the right
@@ -24,6 +28,9 @@ export const sendRequest = mutation({
       throw new Error("You cannot friend yourself");
     const addressee = await ctx.db.get(addresseeId);
     if (!addressee) throw new Error("User not found");
+    if (await isBlockedEitherWay(ctx, requesterId, addresseeId))
+      throw new Error("You cannot send a friend request to this user");
+    await takeRate(ctx, requesterId, "friend_request");
     const existing = await friendshipForPair(ctx, requesterId, addresseeId);
     if (existing?.status === "accepted")
       throw new Error("Already friends");
@@ -34,6 +41,9 @@ export const sendRequest = mutation({
           status: "accepted",
           respondedAt: Date.now(),
         });
+        await deleteNotificationsBetween(ctx, requesterId, existing.requesterId, [
+          "friend_request",
+        ]);
         await notify(ctx, {
           userId: existing.requesterId,
           actorId: requesterId,
@@ -73,6 +83,7 @@ export const accept = mutation({
       status: "accepted",
       respondedAt: Date.now(),
     });
+    await deleteNotificationsBetween(ctx, me, requesterId, ["friend_request"]);
     await notify(ctx, {
       userId: requesterId,
       actorId: me,
@@ -91,6 +102,7 @@ export const decline = mutation({
     const edge = await friendshipForPair(ctx, me, userId);
     if (!edge || edge.status !== "pending" || edge.addresseeId !== me)
       throw new Error("No incoming request from this user");
+    await deleteNotificationsBetween(ctx, me, userId, ["friend_request"]);
     await ctx.db.delete(edge._id);
   },
 });
@@ -103,6 +115,7 @@ export const cancelRequest = mutation({
     const edge = await friendshipForPair(ctx, me, userId);
     if (!edge || edge.status !== "pending" || edge.requesterId !== me)
       throw new Error("No outgoing request to this user");
+    await deleteNotificationsBetween(ctx, userId, me, ["friend_request"]);
     await ctx.db.delete(edge._id);
   },
 });
@@ -167,7 +180,8 @@ export const suggestions = query({
     const me = await getAuthUserId(ctx);
     if (!me) return [];
     const myFriends = await friendIdsOf(ctx, me);
-    const excluded = new Set<Id<"users">>([me, ...myFriends]);
+    const blocked = await blockedPairIds(ctx, me);
+    const excluded = new Set<Id<"users">>([me, ...myFriends, ...blocked]);
     for (const dir of ["by_requester_status", "by_addressee_status"] as const) {
       const pending = await ctx.db
         .query("friendships")

@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
+import type * as blocks from "../blocks.js";
 import type * as comments from "../comments.js";
 import type * as emails from "../emails.js";
 import type * as friends from "../friends.js";
@@ -32,6 +33,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
+  blocks: typeof blocks;
   comments: typeof comments;
   emails: typeof emails;
   friends: typeof friends;

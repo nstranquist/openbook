@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authorCard, notify, requireVisiblePost, loadVisiblePost } from "./lib/social";
+import { takeRate } from "./lib/rate";
 
 export const MAX_COMMENT_LENGTH = 2000;
 
@@ -17,6 +18,7 @@ export const add = mutation({
     if (!trimmed) throw new Error("Comment cannot be empty");
     if (trimmed.length > MAX_COMMENT_LENGTH)
       throw new Error(`Comment too long (max ${MAX_COMMENT_LENGTH})`);
+    await takeRate(ctx, authorId, "comment");
     const post = await requireVisiblePost(ctx, postId, authorId);
     const id = await ctx.db.insert("comments", {
       postId,

@@ -16,17 +16,30 @@ function FriendButton({
   relationship,
 }: {
   userId: Id<"users">;
-  relationship: "self" | "friends" | "outgoing_request" | "incoming_request" | "none";
+  relationship: "self" | "friends" | "outgoing_request" | "incoming_request" | "blocked" | "blocked_by" | "none";
 }) {
   const sendRequest = useMutation(api.friends.sendRequest);
   const accept = useMutation(api.friends.accept);
   const decline = useMutation(api.friends.decline);
   const cancelRequest = useMutation(api.friends.cancelRequest);
   const unfriend = useMutation(api.friends.unfriend);
+  const setBlock = useMutation(api.blocks.set);
   const openDm = useMutation(api.messages.open);
   const navigate = useNavigate();
 
   if (relationship === "self") return null;
+  const blockButton = (
+    <button
+      className="ob-btn"
+      onClick={() => {
+        if (confirm("Block this person? You will unfriend them and hide each other's posts.")) {
+          void runOrToast(setBlock({ userId, blocked: true }), "Could not block");
+        }
+      }}
+    >
+      Block
+    </button>
+  );
   const dmButton = (
     <button
       className="ob-btn"
@@ -40,12 +53,23 @@ function FriendButton({
     </button>
   );
   switch (relationship) {
+    case "blocked":
+      return (
+        <span className="ob-row" style={{ gap: 8 }}>
+          <button className="ob-btn" onClick={() => void runOrToast(setBlock({ userId, blocked: false }), "Could not unblock")}>
+            Unblock
+          </button>
+        </span>
+      );
+    case "blocked_by":
+      return <span className="ob-muted ob-small">This profile is unavailable.</span>;
     case "none":
       return (
         <span className="ob-row" style={{ gap: 8 }}>
           <button className="ob-btn ob-btn--primary" onClick={() => void runOrToast(sendRequest({ userId }), "Could not send request")}>
             ➕ Add Friend
           </button>
+          {blockButton}
         </span>
       );
     case "outgoing_request":
@@ -54,6 +78,7 @@ function FriendButton({
           <button className="ob-btn" onClick={() => void runOrToast(cancelRequest({ userId }), "Could not cancel")}>
             Cancel Request
           </button>
+          {blockButton}
         </span>
       );
     case "incoming_request":
@@ -65,6 +90,7 @@ function FriendButton({
           <button className="ob-btn" onClick={() => void runOrToast(decline({ userId }), "Could not decline")}>
             Delete Request
           </button>
+          {blockButton}
         </span>
       );
     case "friends":
@@ -79,6 +105,7 @@ function FriendButton({
             ✓ Friends
           </button>
           {dmButton}
+          {blockButton}
         </span>
       );
   }

@@ -8,12 +8,15 @@ import { effectivePlan, planLimits, assertWithinLimit } from "./lib/plans";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  blockedPairIds,
   emptyReactionCounts,
   enrichPost,
   friendIdsOf,
+  isBlockedEitherWay,
   loadVisiblePost,
   postVisibleTo,
 } from "./lib/social";
+import { takeRate } from "./lib/rate";
 
 const FEED_SCAN_PAGES = 8;
 
@@ -23,7 +26,14 @@ async function paginateVisiblePosts(
   paginationOpts: PaginationOptions,
   authorId?: Id<"users">,
 ) {
-  const friendIds = new Set(await friendIdsOf(ctx, viewerId));
+  if (authorId && authorId !== viewerId && (await isBlockedEitherWay(ctx, viewerId, authorId))) {
+    return { page: [], isDone: true, continueCursor: "" };
+  }
+  const [friendList, blockedIds] = await Promise.all([
+    friendIdsOf(ctx, viewerId),
+    blockedPairIds(ctx, viewerId),
+  ]);
+  const friendIds = new Set(friendList);
   const target = Math.max(1, paginationOpts.numItems);
   const visible: Doc<"posts">[] = [];
   let cursor = paginationOpts.cursor;
@@ -42,7 +52,7 @@ async function paginateVisiblePosts(
           .order("desc")
           .paginate({ numItems: target, cursor });
     for (const post of page.page) {
-      if (postVisibleTo(post, viewerId, friendIds)) visible.push(post);
+      if (postVisibleTo(post, viewerId, friendIds, blockedIds)) visible.push(post);
     }
     isDone = page.isDone;
     continueCursor = page.continueCursor;
@@ -66,6 +76,7 @@ export const create = mutation({
     if (!trimmed) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
+    await takeRate(ctx, authorId, "post");
     // Plan gate (SaaS spine): the free tier caps lifetime posts; Pro is
     // unlimited. Reads the effective plan so a lapsed sub downgrades correctly.
     const plan = await effectivePlan(ctx, authorId);
@@ -95,6 +106,30 @@ export const feed = query({
     if (!viewerId)
       return { page: [], isDone: true, continueCursor: "" };
     return await paginateVisiblePosts(ctx, viewerId, paginationOpts);
+  },
+});
+
+export const update = mutation({
+  args: {
+    id: v.id("posts"),
+    body: v.string(),
+    audience: v.optional(audienceValidator),
+  },
+  handler: async (ctx, { id, body, audience }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const post = await ctx.db.get(id);
+    if (!post || post.authorId !== userId) throw new Error("Post not found");
+    const trimmed = body.trim();
+    if (!trimmed) throw new Error("Post cannot be empty");
+    if (trimmed.length > MAX_POST_LENGTH)
+      throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
+    const patch: { body: string; editedAt: number; audience?: "public" | "friends" } = {
+      body: trimmed,
+      editedAt: Date.now(),
+    };
+    if (audience) patch.audience = audience;
+    await ctx.db.patch(id, patch);
   },
 });
 

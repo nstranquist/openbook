@@ -77,6 +77,7 @@ describe("friendship lifecycle", () => {
     await alice.as.mutation(api.friends.sendRequest, { userId: bob.userId });
     const bobReqs = await bob.as.query(api.friends.requests, {});
     expect(bobReqs.incoming.map((c: any) => c.userId)).toContain(alice.userId);
+    expect(await bob.as.query(api.notifications.unreadCount, {})).toBe(1);
 
     await bob.as.mutation(api.friends.accept, { userId: alice.userId });
     const aliceFriends = await alice.as.query(api.friends.list, {});
@@ -84,9 +85,7 @@ describe("friendship lifecycle", () => {
     expect(aliceFriends.map((c: any) => c.userId)).toContain(bob.userId);
     expect(bobFriends.map((c: any) => c.userId)).toContain(alice.userId);
 
-    // request notified Bob; accept notified Alice
-    const bobNotifs = await bob.as.query(api.notifications.list, {});
-    expect(bobNotifs.some((n: any) => n.kind === "friend_request")).toBe(true);
+    expect(await bob.as.query(api.notifications.unreadCount, {})).toBe(0);
     const aliceNotifs = await alice.as.query(api.notifications.list, {});
     expect(aliceNotifs.some((n: any) => n.kind === "friend_accept")).toBe(true);
   });
@@ -549,5 +548,67 @@ describe("pair collapse", () => {
     expect(list.some((f: any) => f.userId === bob.userId)).toBe(true);
     await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
     expect(await alice.as.query(api.friends.list, {})).toEqual([]);
+  });
+});
+
+describe("blocks", () => {
+  it("hides posts and rejects friend requests in both directions", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "hello bob", audience: "public",
+    });
+    expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
+    await alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: true });
+    expect(await alice.as.query(api.friends.list, {})).toEqual([]);
+    expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
+    await expect(
+      bob.as.mutation(api.friends.sendRequest, { userId: alice.userId }),
+    ).rejects.toThrow(/cannot send/i);
+    await alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: false });
+    expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
+  });
+});
+
+describe("post edit and account close", () => {
+  it("author can edit body and audience", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "draft", audience: "friends",
+    });
+    await alice.as.mutation(api.posts.update, {
+      id: postId, body: "published", audience: "public",
+    });
+    const got = await alice.as.query(api.posts.get, { id: postId });
+    expect(got?.body).toBe("published");
+    expect(got?.audience).toBe("public");
+    expect(got?.editedAt).toBeTruthy();
+  });
+
+  it("deleteAccount hides the profile and posts", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "gone soon", audience: "public",
+    });
+    await alice.as.mutation(api.profiles.deleteAccount, {});
+    expect(await bob.as.query(api.profiles.view, { userId: alice.userId })).toBeNull();
+    expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
+  });
+});
+
+describe("friend notification cleanup", () => {
+  it("decline removes the friend_request notification", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await bob.as.mutation(api.friends.sendRequest, { userId: alice.userId });
+    expect(await alice.as.query(api.notifications.unreadCount, {})).toBe(1);
+    await alice.as.mutation(api.friends.decline, { userId: bob.userId });
+    expect(await alice.as.query(api.notifications.unreadCount, {})).toBe(0);
   });
 });

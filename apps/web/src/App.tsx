@@ -1,5 +1,5 @@
-import { api, useSession } from "@openbook/shared";
-import { useConvexAuth, useMutation } from "convex/react";
+import { api, useAuth, useSession } from "@openbook/shared";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { SignIn } from "./components/SignIn";
@@ -11,20 +11,33 @@ import { PostPage } from "./pages/PostPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-// Every authenticated session ensures its profile row exists before the social
-// surface renders — profiles.ensure is idempotent, so this is a cheap no-op
-// after the first boot.
+function ClosedAccount() {
+  const { signOut } = useAuth();
+  return (
+    <div className="ob-landing">
+      <div className="ob-card ob-empty-cta" style={{ maxWidth: 420 }}>
+        <p className="ob-bold" style={{ fontSize: 17 }}>This account is closed</p>
+        <p className="ob-muted ob-small">Sign out to create a new one.</p>
+        <button className="ob-btn ob-btn--primary" onClick={() => void signOut()}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EnsureProfile({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.profiles.me);
   const ensure = useMutation(api.profiles.ensure);
   useEffect(() => {
-    if (isAuthenticated) {
-      const pendingName = sessionStorage.getItem("openbook.signupName");
-      void ensure(pendingName ? { displayName: pendingName } : {}).then(() =>
-        sessionStorage.removeItem("openbook.signupName"),
-      );
-    }
-  }, [isAuthenticated, ensure]);
+    if (!isAuthenticated || me === undefined || me?.deleted) return;
+    const pendingName = sessionStorage.getItem("openbook.signupName");
+    void ensure(pendingName ? { displayName: pendingName } : {}).then(() =>
+      sessionStorage.removeItem("openbook.signupName"),
+    );
+  }, [isAuthenticated, me, ensure]);
+  if (me?.deleted) return <ClosedAccount />;
   return <>{children}</>;
 }
 
