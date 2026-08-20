@@ -26,7 +26,7 @@ proof:
         - id: publication-gate
           statement: The repository defines one publication verification command for type checks, tests, build, license review, and secret scanning.
           evidence_kind: test
-          evidence_url: https://github.com/nstranquist/openbook#verification-all-green-as-of-2026-07-13
+          evidence_url: https://github.com/nstranquist/openbook#verification-unit--types-as-of-2026-08-20
     boundaries:
         - The portfolio does not claim a currently deployed public Openbook service.
         - Fixture and local verification do not prove production traffic or external adoption.
