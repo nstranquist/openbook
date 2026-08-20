@@ -5,6 +5,7 @@ import {
   authorCard,
   deleteNotificationsBetween,
   friendshipForPair,
+  occupyPair,
   pairKey,
   requireActiveUser,
 } from "./lib/social";
@@ -26,6 +27,7 @@ export const set = mutation({
     const existingRows = mine.filter((row) => row.blockedId === userId);
     if (blocked) {
       if (existingRows.length === 0) {
+        await occupyPair(ctx, "block", key);
         await ctx.db.insert("blocks", {
           blockerId: me,
           blockedId: userId,

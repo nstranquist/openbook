@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
+  areFriends,
   authorCard,
   blockedPairIds,
   collapseDuplicatePairRows,
@@ -11,6 +12,7 @@ import {
   friendshipForPair,
   isBlockedEitherWay,
   notify,
+  occupyPair,
   pairKey,
   requireActiveUser,
 } from "./lib/social";
@@ -54,6 +56,7 @@ export const sendRequest = mutation({
       throw new Error("Request already sent");
     }
     const key = pairKey(requesterId, addresseeId);
+    await occupyPair(ctx, "friendship", key);
     const id = await ctx.db.insert("friendships", {
       requesterId,
       addresseeId,
@@ -138,6 +141,15 @@ export const list = query({
     const me = await getAuthUserId(ctx);
     if (!me) return [];
     const subject = userId ?? me;
+    if (subject !== me) {
+      const theirProfile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", subject))
+        .unique();
+      if (theirProfile?.friendsListPublic === false) {
+        if (!(await areFriends(ctx, me, subject))) return [];
+      }
+    }
     const ids = await friendIdsOf(ctx, subject);
     return await Promise.all(ids.map((id) => authorCard(ctx, id)));
   },

@@ -116,6 +116,20 @@ async function stripeForm(path: string, params: Record<string, unknown>): Promis
   return json;
 }
 
+export async function cancelStripeSubscriptionAtProvider(
+  stripeSubscriptionId: string,
+): Promise<void> {
+  const res = await fetch(`${STRIPE_API}/subscriptions/${stripeSubscriptionId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${stripeSecretKey()}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    const json = await res.json().catch(() => ({}));
+    const msg = (json as { error?: { message?: string } })?.error?.message ?? res.status;
+    throw new Error(`Stripe cancel failed: ${msg}`);
+  }
+}
+
 // flattenForm turns a nested object into Stripe's bracketed form encoding:
 //   { line_items: [{ price: "p", quantity: 1 }] }
 //     → line_items[0][price]=p, line_items[0][quantity]=1

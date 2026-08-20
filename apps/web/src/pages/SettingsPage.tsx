@@ -6,6 +6,90 @@ import { Avatar } from "../components/Avatar";
 import { BillingPanel } from "../components/BillingPanel";
 import { runOrToast } from "../lib/run";
 
+function PasswordChange() {
+  const me = useQuery(api.profiles.me);
+  const { changePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!me?.email) return null;
+  return (
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-card-title">Password</div>
+      <div className="g-hint">Change your password while signed in. Social-login accounts skip this.</div>
+      <div className="g-stack" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)" }}>
+        <input className="g-input" type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+        <input className="g-input" type="password" placeholder="New password (8+ characters)" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} />
+        <button
+          className="g-btn g-btn--primary"
+          disabled={busy || !currentPassword || nextPassword.length < 8}
+          onClick={() => {
+            setBusy(true);
+            void changePassword(me.email!, currentPassword, nextPassword)
+              .then(() => {
+                toast("Password updated", "ok");
+                setCurrentPassword("");
+                setNextPassword("");
+              })
+              .catch((e) => toast(e instanceof Error ? e.message : "Could not change password", "err"))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? "Saving…" : "Update password"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MutedList() {
+  const muted = useQuery(api.mutes.list);
+  const setMute = useMutation(api.mutes.set);
+  if (!muted || muted.length === 0) return null;
+  return (
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-card-title">Muted</div>
+      <div className="g-hint">Their posts stay off your feed. You remain friends.</div>
+      {muted.map((row) => (
+        <div key={row.userId} className="g-spread" style={{ marginTop: "var(--space-3)" }}>
+          <span className="ob-row" style={{ gap: 8 }}>
+            <Avatar name={row.displayName} hue={row.avatarHue} size={32} userId={row.userId} />
+            <span className="ob-bold">{row.displayName}</span>
+          </span>
+          <button
+            className="g-btn g-btn--sm"
+            onClick={() => void runOrToast(setMute({ userId: row.userId as Id<"users">, muted: false }), "Could not unmute")}
+          >
+            Unmute
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OperatorQueue() {
+  const me = useQuery(api.profiles.me);
+  const queue = useQuery(api.reports.queue, me?.isOperator ? {} : "skip");
+  const review = useMutation(api.reports.review);
+  if (!me?.isOperator) return null;
+  return (
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-card-title">Report queue</div>
+      <div className="g-hint">OPERATOR_USER_IDS on the deployment gates this list.</div>
+      {(queue ?? []).length === 0 && <div className="ob-empty ob-small">No open reports.</div>}
+      {(queue ?? []).map((row) => (
+        <div key={row._id} className="g-spread" style={{ marginTop: "var(--space-3)" }}>
+          <span className="ob-small">{row.reason}</span>
+          <button className="g-btn g-btn--sm" onClick={() => void runOrToast(review({ id: row._id, status: "closed" }), "Could not close")}>
+            Close
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BlockedList() {
   const blocked = useQuery(api.blocks.list);
   const setBlock = useMutation(api.blocks.set);
@@ -64,6 +148,8 @@ export function SettingsPage() {
   const [bio, setBio] = useState("");
   const [work, setWork] = useState("");
   const [location, setLocation] = useState("");
+  const [bioAudience, setBioAudience] = useState<"public" | "friends">("public");
+  const [friendsListPublic, setFriendsListPublic] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -73,6 +159,8 @@ export function SettingsPage() {
       setBio(me.bio ?? "");
       setWork(me.work ?? "");
       setLocation(me.location ?? "");
+      setBioAudience(me.bioAudience === "friends" ? "friends" : "public");
+      setFriendsListPublic(me.friendsListPublic !== false);
       setLoaded(true);
     }
   }, [me, loaded]);
@@ -83,7 +171,7 @@ export function SettingsPage() {
   async function save() {
     setBusy(true);
     try {
-      await update({ displayName, bio, work, location });
+      await update({ displayName, bio, work, location, bioAudience, friendsListPublic });
       toast("Profile saved", "ok");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Save failed", "err");
@@ -120,6 +208,17 @@ export function SettingsPage() {
               <input className="g-input" value={location} onChange={(e) => setLocation(e.target.value)} />
             </label>
           </div>
+          <label className="g-field">
+            <span className="g-label">About visibility</span>
+            <select className="g-input" value={bioAudience} onChange={(e) => setBioAudience(e.target.value as "public" | "friends")}>
+              <option value="public">Public</option>
+              <option value="friends">Friends only</option>
+            </select>
+          </label>
+          <label className="ob-small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={friendsListPublic} onChange={(e) => setFriendsListPublic(e.target.checked)} />
+            Show my friends list on my profile
+          </label>
           <div className="g-row" style={{ justifyContent: "flex-end" }}>
             <button className="g-btn g-btn--primary" onClick={() => void save()} disabled={busy || !displayName.trim()}>
               Save changes
@@ -127,6 +226,8 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <PasswordChange />
 
       <BillingPanel />
 
@@ -140,7 +241,11 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <MutedList />
+
       <BlockedList />
+
+      <OperatorQueue />
 
       <div className="g-card" style={{ marginTop: "var(--space-5)", borderColor: "color-mix(in oklch, var(--danger), transparent 60%)" }}>
         <div className="g-spread">

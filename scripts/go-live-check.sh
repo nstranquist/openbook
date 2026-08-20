@@ -58,6 +58,13 @@ else
 fi
 
 echo
+echo "▌ Mail and operators"
+if have RESEND_API_KEY; then row "RESEND_API_KEY" "✓ set (reset/verify + notification mail)"; else row "RESEND_API_KEY" "⚠ unset — password reset and email notify stay off"; warn=1; fi
+if have EMAIL_FROM; then row "EMAIL_FROM" "✓ $EMAIL_FROM"; else row "EMAIL_FROM" "⚠ default Openbook <onboarding@resend.dev>"; warn=1; fi
+if have OPERATOR_USER_IDS; then row "OPERATOR_USER_IDS" "✓ set"; else row "OPERATOR_USER_IDS" "⚠ unset — report queue is empty for everyone"; warn=1; fi
+if have SITE_URL; then row "SITE_URL" "✓ $SITE_URL"; else row "SITE_URL" "⚠ unset — checkout returns and email links need it"; warn=1; fi
+
+echo
 if [ "$fail" -ne 0 ]; then
   echo "RESULT: NOT READY — fix the ✗ rows above."
   exit 1

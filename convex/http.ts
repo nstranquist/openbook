@@ -99,4 +99,16 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/health",
+  method: "GET",
+  handler: httpAction(async () => {
+    return Response.json({
+      ok: true,
+      service: "openbook",
+      sla: "none",
+    });
+  }),
+});
+
 export default http;

@@ -14,9 +14,11 @@ import { joinedLabel } from "../lib/format";
 function FriendButton({
   userId,
   relationship,
+  muted,
 }: {
   userId: Id<"users">;
   relationship: "self" | "friends" | "outgoing_request" | "incoming_request" | "blocked" | "blocked_by" | "none";
+  muted?: boolean;
 }) {
   const sendRequest = useMutation(api.friends.sendRequest);
   const accept = useMutation(api.friends.accept);
@@ -24,6 +26,8 @@ function FriendButton({
   const cancelRequest = useMutation(api.friends.cancelRequest);
   const unfriend = useMutation(api.friends.unfriend);
   const setBlock = useMutation(api.blocks.set);
+  const setMute = useMutation(api.mutes.set);
+  const report = useMutation(api.reports.create);
   const openDm = useMutation(api.messages.open);
   const navigate = useNavigate();
 
@@ -52,6 +56,31 @@ function FriendButton({
       💬 Message
     </button>
   );
+  const muteButton = (
+    <button
+      className="ob-btn"
+      onClick={() =>
+        void runOrToast(
+          setMute({ userId, muted: !muted }),
+          "Could not update mute",
+        )
+      }
+    >
+      {muted ? "Unmute" : "Mute"}
+    </button>
+  );
+  const reportButton = (
+    <button
+      className="ob-btn"
+      onClick={() => {
+        const reason = prompt("Why are you reporting this person?");
+        if (!reason?.trim()) return;
+        void runOrToast(report({ targetUserId: userId, reason }), "Could not report");
+      }}
+    >
+      Report
+    </button>
+  );
   switch (relationship) {
     case "blocked":
       return (
@@ -65,37 +94,43 @@ function FriendButton({
       return <span className="ob-muted ob-small">This profile is unavailable.</span>;
     case "none":
       return (
-        <span className="ob-row" style={{ gap: 8 }}>
+        <span className="ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <button className="ob-btn ob-btn--primary" onClick={() => void runOrToast(sendRequest({ userId }), "Could not send request")}>
             ➕ Add Friend
           </button>
+          {muteButton}
           {blockButton}
+          {reportButton}
         </span>
       );
     case "outgoing_request":
       return (
-        <span className="ob-row" style={{ gap: 8 }}>
+        <span className="ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <button className="ob-btn" onClick={() => void runOrToast(cancelRequest({ userId }), "Could not cancel")}>
             Cancel Request
           </button>
+          {muteButton}
           {blockButton}
+          {reportButton}
         </span>
       );
     case "incoming_request":
       return (
-        <span className="ob-row" style={{ gap: 8 }}>
+        <span className="ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <button className="ob-btn ob-btn--primary" onClick={() => void runOrToast(accept({ userId }), "Could not accept")}>
             Confirm Request
           </button>
           <button className="ob-btn" onClick={() => void runOrToast(decline({ userId }), "Could not decline")}>
             Delete Request
           </button>
+          {muteButton}
           {blockButton}
+          {reportButton}
         </span>
       );
     case "friends":
       return (
-        <span className="ob-row" style={{ gap: 8 }}>
+        <span className="ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <button
             className="ob-btn"
             onClick={() => {
@@ -105,7 +140,9 @@ function FriendButton({
             ✓ Friends
           </button>
           {dmButton}
+          {muteButton}
           {blockButton}
+          {reportButton}
         </span>
       );
   }
@@ -240,7 +277,7 @@ export function ProfilePage() {
                   ✏️ Edit profile
                 </button>
               ) : (
-                <FriendButton userId={id} relationship={profile.relationship} />
+                <FriendButton userId={id} relationship={profile.relationship} muted={profile.muted} />
               )}
             </div>
           </div>

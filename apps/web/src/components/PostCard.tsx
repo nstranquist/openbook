@@ -6,7 +6,7 @@ import {
   type Id,
   type ReactionKind,
 } from "@openbook/shared";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "./Avatar";
@@ -25,6 +25,7 @@ interface EnrichedPost {
   createdAt: number;
   editedAt?: number | null;
   imageUrl?: string | null;
+  videoUrl?: string | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -77,8 +78,29 @@ function ReactionSummary({
   return <div className="ob-post-stats">{body}</div>;
 }
 
+function ReportButton({ postId }: { postId: Id<"posts"> }) {
+  const create = useMutation(api.reports.create);
+  return (
+    <button
+      type="button"
+      className="ob-action"
+      onClick={() => {
+        const reason = prompt("Why are you reporting this post?");
+        if (!reason?.trim()) return;
+        void runOrToast(create({ postId, reason }), "Could not report");
+      }}
+    >
+      Report
+    </button>
+  );
+}
+
 function Comments({ postId }: { postId: Id<"posts"> }) {
-  const comments = useQuery(api.comments.list, { postId });
+  const { results: comments, status, loadMore } = usePaginatedQuery(
+    api.comments.list,
+    { postId },
+    { initialNumItems: 20 },
+  );
   const me = useQuery(api.profiles.me);
   const addComment = useMutation(api.comments.add);
   const removeComment = useMutation(api.comments.remove);
@@ -94,7 +116,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
 
   return (
     <div className="ob-reveal">
-      {(comments ?? []).map((c) => (
+      {comments.map((c) => (
         <div className="ob-comment" key={c._id}>
           <Avatar name={c.author.displayName} hue={c.author.avatarHue} size={32} userId={c.author.userId} />
           <div>
@@ -122,6 +144,11 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
           </div>
         </div>
       ))}
+      {status === "CanLoadMore" && (
+        <button type="button" className="ob-btn ob-btn--sm" onClick={() => loadMore(20)}>
+          Earlier comments
+        </button>
+      )}
       {me && (
         <form className="ob-comment" onSubmit={submit}>
           <Avatar name={me.displayName} hue={me.avatarHue} size={32} />
@@ -265,6 +292,9 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           {post.imageUrl ? (
             <img src={post.imageUrl} alt="" className="ob-post-image" />
           ) : null}
+          {post.videoUrl ? (
+            <video src={post.videoUrl} className="ob-post-image" controls />
+          ) : null}
         </>
       )}
       <ReactionSummary
@@ -350,6 +380,9 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
         >
           <span aria-hidden="true">💬</span> Comment
         </button>
+        {!isMine && (
+          <ReportButton postId={post._id} />
+        )}
       </div>
       {showComments && (
         <>

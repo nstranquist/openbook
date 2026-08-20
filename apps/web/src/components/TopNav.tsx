@@ -32,6 +32,7 @@ function SearchBox() {
     return () => clearTimeout(handle);
   }, [q]);
   const results = useQuery(api.profiles.search, debounced ? { q: debounced } : "skip");
+  const posts = useQuery(api.posts.search, debounced ? { q: debounced } : "skip");
   const ref = useClickOutside(() => setOpen(false));
   const navigate = useNavigate();
   return (
@@ -50,10 +51,11 @@ function SearchBox() {
         <div className="ob-menu">
           {results === undefined ? (
             <div className="ob-empty ob-small">Searching…</div>
-          ) : results.length === 0 ? (
+          ) : results.length === 0 && (posts ?? []).length === 0 ? (
             <div className="ob-empty ob-small">No people found for “{q}”</div>
           ) : (
-            results.map((p) => (
+            <>
+            {results.map((p) => (
               <button
                 key={p.userId}
                 className="ob-menu-item"
@@ -73,7 +75,21 @@ function SearchBox() {
                   ) : null}
                 </span>
               </button>
-            ))
+            ))}
+            {(posts ?? []).map((p) => (
+              <button
+                key={p._id}
+                className="ob-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  setQ("");
+                  navigate(`/post/${p._id}`);
+                }}
+              >
+                <span className="ob-grow ob-small">{p.body.slice(0, 80) || "Photo post"}</span>
+              </button>
+            ))}
+            </>
           )}
         </div>
       )}
@@ -225,6 +241,22 @@ export function TopNav() {
           aria-label="Friends"
         >
           👥
+        </NavLink>
+        <NavLink
+          to="/groups"
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Groups"
+          aria-label="Groups"
+        >
+          ⬡
+        </NavLink>
+        <NavLink
+          to="/events"
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Events"
+          aria-label="Events"
+        >
+          📅
         </NavLink>
         <NavLink
           to="/messages"

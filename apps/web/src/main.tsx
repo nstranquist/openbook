@@ -16,6 +16,9 @@ const convex = createConvexClient(resolveConvexUrl(import.meta.env));
 function Root() {
   useEffect(() => {
     initTheme();
+    if ("serviceWorker" in navigator && import.meta.env.PROD) {
+      void navigator.serviceWorker.register("/sw.js");
+    }
   }, []);
   return (
     <ConvexAuthProvider client={convex}>

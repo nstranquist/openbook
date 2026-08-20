@@ -10,6 +10,7 @@ import {
   blockedPairIds,
   collapseDuplicatePairRows,
   isBlockedEitherWay,
+  occupyPair,
   pairKey,
   requireActiveUser,
 } from "./lib/social";
@@ -30,6 +31,7 @@ async function getOrCreateConversation(
   const other = await ctx.db.get(otherId);
   if (!other) throw new Error("User not found");
   const key = pairKey(me, otherId);
+  await occupyPair(ctx, "conversation", key);
   const existing = await collapseDuplicatePairRows(ctx, "conversations", key);
   if (existing) return existing as Doc<"conversations">;
   const now = Date.now();
@@ -78,7 +80,13 @@ export const open = mutation({
     if (await isBlockedEitherWay(ctx, me, userId)) {
       throw new Error("You cannot message this user");
     }
-    if (existing) return existing._id;
+    if (existing) {
+      const member = await memberRow(ctx, existing._id, me);
+      if (member?.hiddenAt) {
+        await ctx.db.patch(member._id, { hiddenAt: undefined });
+      }
+      return existing._id;
+    }
     if (!(await areFriends(ctx, me, userId))) {
       throw new Error("You can only message friends");
     }
@@ -122,6 +130,7 @@ export const send = mutation({
         lastActivityAt: now,
         unreadCount:
           userId === me ? member.unreadCount : member.unreadCount + 1,
+        hiddenAt: userId === me ? member.hiddenAt : undefined,
       });
     }
     return id;
@@ -182,7 +191,7 @@ export const myConversations = query({
         const conversation = await ctx.db.get(m.conversationId);
         if (!conversation) return null;
         const otherId = conversation.participantIds.find((p) => p !== me);
-        if (!otherId || blocked.has(otherId)) return null;
+        if (!otherId || blocked.has(otherId) || m.hiddenAt) return null;
         return {
           conversationId: conversation._id,
           other: await authorCard(ctx, otherId),
@@ -218,13 +227,24 @@ export const list = query({
       )
       .order("desc")
       .paginate(paginationOpts);
+    const otherMember = otherId
+      ? await ctx.db
+          .query("conversationMembers")
+          .withIndex("by_conversation_user", (q) =>
+            q.eq("conversationId", conversationId).eq("userId", otherId),
+          )
+          .unique()
+      : null;
+    const otherReadAt = otherMember?.lastReadAt ?? 0;
     return {
       ...page,
       page: page.page.map((m) => ({
         _id: m._id,
         body: m.body,
         createdAt: m.createdAt,
+        editedAt: m.editedAt ?? null,
         isMine: m.senderId === me,
+        seenByOther: m.senderId === me && otherReadAt >= m.createdAt,
       })),
     };
   },
@@ -237,7 +257,65 @@ export const markRead = mutation({
     if (!me) throw new Error("Not authenticated");
     const member = await memberRow(ctx, conversationId, me);
     if (member && member.unreadCount > 0)
-      await ctx.db.patch(member._id, { unreadCount: 0 });
+      await ctx.db.patch(member._id, { unreadCount: 0, lastReadAt: Date.now(), hiddenAt: undefined });
+    else if (member)
+      await ctx.db.patch(member._id, { lastReadAt: Date.now() });
+  },
+});
+
+export const edit = mutation({
+  args: { id: v.id("messages"), body: v.string() },
+  handler: async (ctx, { id, body }) => {
+    const me = await requireActiveUser(ctx);
+    const message = await ctx.db.get(id);
+    if (!message || message.senderId !== me) throw new Error("Message not found");
+    const trimmed = body.trim();
+    if (!trimmed) throw new Error("Message cannot be empty");
+    await ctx.db.patch(id, { body: trimmed, editedAt: Date.now() });
+  },
+});
+
+export const hide = mutation({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, { conversationId }) => {
+    const me = await requireActiveUser(ctx);
+    const member = await memberRow(ctx, conversationId, me);
+    if (member) await ctx.db.patch(member._id, { hiddenAt: Date.now() });
+  },
+});
+
+export const search = query({
+  args: { q: v.string() },
+  handler: async (ctx, { q }) => {
+    const me = await getAuthUserId(ctx);
+    if (!me) return [];
+    const term = q.trim();
+    if (!term) return [];
+    const blocked = await blockedPairIds(ctx, me);
+    const hits = await ctx.db
+      .query("messages")
+      .withSearchIndex("search_body", (s) => s.search("body", term))
+      .take(24);
+    const out: Array<{
+      _id: Id<"messages">;
+      body: string;
+      createdAt: number;
+      conversationId: Id<"conversations">;
+    }> = [];
+    for (const message of hits) {
+      const conversation = await ctx.db.get(message.conversationId);
+      if (!conversation?.participantIds.includes(me)) continue;
+      const otherId = conversation.participantIds.find((p) => p !== me);
+      if (otherId && blocked.has(otherId)) continue;
+      out.push({
+        _id: message._id,
+        body: message.body,
+        createdAt: message.createdAt,
+        conversationId: conversation._id,
+      });
+      if (out.length >= 8) break;
+    }
+    return out;
   },
 });
 
@@ -256,7 +334,7 @@ export const unreadTotal = query({
     for (const m of memberships) {
       const conversation = await ctx.db.get(m.conversationId);
       const otherId = conversation?.participantIds.find((p) => p !== me);
-      if (!otherId || blocked.has(otherId)) continue;
+      if (!otherId || blocked.has(otherId) || m.hiddenAt) continue;
       total += m.unreadCount;
     }
     return total;

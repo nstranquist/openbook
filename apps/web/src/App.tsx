@@ -10,6 +10,9 @@ import { MessagesPage } from "./pages/MessagesPage";
 import { PostPage } from "./pages/PostPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { GroupsPage } from "./pages/GroupsPage";
+import { EventsPage } from "./pages/EventsPage";
+import { StatusPage } from "./pages/StatusPage";
 
 function ClosedAccount() {
   const { signOut } = useAuth();
@@ -56,7 +59,14 @@ export function App() {
     );
   }
 
-  if (!isAuthenticated) return <SignIn />;
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/status" element={<StatusPage />} />
+        <Route path="*" element={<SignIn />} />
+      </Routes>
+    );
+  }
 
   return (
     <EnsureProfile>
@@ -70,6 +80,10 @@ export function App() {
           <Route path="/profile/:userId" element={<ProfilePage />} />
           <Route path="/post/:postId" element={<PostPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/groups" element={<GroupsPage />} />
+          <Route path="/groups/:groupId" element={<GroupsPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/status" element={<StatusPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

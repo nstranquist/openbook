@@ -16,6 +16,7 @@ export function useAuth(): {
   signInWith: (provider: "github" | "google") => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>;
+  changePassword: (email: string, currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
 } {
   const { signIn, signOut } = useAuthActions();
@@ -43,6 +44,9 @@ export function useAuth(): {
         newPassword,
         flow: "reset-verification",
       });
+    },
+    changePassword: async (email, currentPassword, newPassword) => {
+      await signIn("password-change", { email, currentPassword, newPassword });
     },
     signOut: async () => {
       await signOut();

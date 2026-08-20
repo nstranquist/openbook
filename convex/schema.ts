@@ -57,6 +57,8 @@ export default defineSchema({
     coverHue: v.number(),
     joinedAt: v.number(),
     deletedAt: v.optional(v.number()),
+    bioAudience: v.optional(audienceValidator),
+    friendsListPublic: v.optional(v.boolean()),
   })
     .index("by_user", ["userId"])
     .searchIndex("search_name", { searchField: "displayName" }),
@@ -70,11 +72,15 @@ export default defineSchema({
     createdAt: v.number(),
     editedAt: v.optional(v.number()),
     imageId: v.optional(v.id("_storage")),
+    videoId: v.optional(v.id("_storage")),
+    groupId: v.optional(v.id("groups")),
     commentCount: v.number(),
     reactionCounts: reactionCountsValidator,
   })
     .index("by_author", ["authorId"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_group", ["groupId", "createdAt"])
+    .searchIndex("search_body", { searchField: "body", filterFields: ["audience"] }),
 
   comments: defineTable({
     postId: v.id("posts"),
@@ -143,6 +149,8 @@ export default defineSchema({
     userId: v.id("users"),
     lastActivityAt: v.number(), // mirror of conversation.lastMessageAt for sorting
     unreadCount: v.number(),
+    lastReadAt: v.optional(v.number()),
+    hiddenAt: v.optional(v.number()),
   })
     .index("by_user", ["userId", "lastActivityAt"])
     .index("by_conversation_user", ["conversationId", "userId"]),
@@ -152,7 +160,10 @@ export default defineSchema({
     senderId: v.id("users"),
     body: v.string(),
     createdAt: v.number(),
-  }).index("by_conversation", ["conversationId"]),
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_conversation", ["conversationId"])
+    .searchIndex("search_body", { searchField: "body" }),
 
   // Billing mirror, keyed by user, kept in sync by the Stripe webhook (billing.ts).
   subscriptions: defineTable({
@@ -192,5 +203,92 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_storage", ["storageId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_used_created", ["used", "createdAt"]),
+
+  pairLocks: defineTable({
+    kind: v.string(),
+    pairKey: v.string(),
+    createdAt: v.number(),
+  }).index("by_kind_key", ["kind", "pairKey"]),
+
+  mutes: defineTable({
+    muterId: v.id("users"),
+    mutedId: v.id("users"),
+    pairKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_pair", ["pairKey"])
+    .index("by_muter", ["muterId"]),
+
+  reports: defineTable({
+    reporterId: v.id("users"),
+    targetUserId: v.optional(v.id("users")),
+    postId: v.optional(v.id("posts")),
+    reason: v.string(),
+    status: v.union(v.literal("open"), v.literal("closed")),
+    createdAt: v.number(),
+  })
+    .index("by_reporter", ["reporterId"])
+    .index("by_status", ["status", "createdAt"]),
+
+  stories: defineTable({
+    authorId: v.id("users"),
+    body: v.string(),
+    imageId: v.optional(v.id("_storage")),
+    audience: audienceValidator,
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_author", ["authorId"])
+    .index("by_expires", ["expiresAt"]),
+
+  groups: defineTable({
+    name: v.string(),
+    description: v.string(),
+    kind: v.union(v.literal("group"), v.literal("page")),
+    creatorId: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_creator", ["creatorId"]),
+
+  groupMembers: defineTable({
+    groupId: v.id("groups"),
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("member")),
+    createdAt: v.number(),
+  })
+    .index("by_group", ["groupId"])
+    .index("by_user", ["userId"])
+    .index("by_group_user", ["groupId", "userId"]),
+
+  events: defineTable({
+    title: v.string(),
+    description: v.string(),
+    startAt: v.number(),
+    hostId: v.id("users"),
+    groupId: v.optional(v.id("groups")),
+    createdAt: v.number(),
+  })
+    .index("by_start", ["startAt"])
+    .index("by_host", ["hostId"]),
+
+  eventRsvps: defineTable({
+    eventId: v.id("events"),
+    userId: v.id("users"),
+    status: v.union(v.literal("going"), v.literal("interested")),
+    createdAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_user", ["userId"])
+    .index("by_event_user", ["eventId", "userId"]),
+
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 });

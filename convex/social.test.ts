@@ -368,9 +368,9 @@ describe("comments", () => {
     feed = await alice.as.query(api.posts.feed, { paginationOpts: firstPage });
     expect(feed.page[0].commentCount).toBe(1);
 
-    const comments = await alice.as.query(api.comments.list, { postId });
-    expect(comments).toHaveLength(1);
-    expect(comments[0].author.displayName).toBe("Carol");
+    const comments = await alice.as.query(api.comments.list, { postId, paginationOpts: firstPage });
+    expect(comments.page).toHaveLength(1);
+    expect(comments.page[0].author.displayName).toBe("Carol");
     // Alice got exactly 2 comment notifications (none for her own actions).
     const notifs = await alice.as.query(api.notifications.list, {});
     expect(notifs.filter((n: any) => n.kind === "comment")).toHaveLength(2);
@@ -385,10 +385,10 @@ describe("comments", () => {
       body: "friends thread", audience: "friends",
     });
     await bob.as.mutation(api.comments.add, { postId, body: "hi" });
-    expect(await bob.as.query(api.comments.list, { postId })).toHaveLength(1);
+    expect((await bob.as.query(api.comments.list, { postId, paginationOpts: firstPage })).page).toHaveLength(1);
 
     await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
-    expect(await bob.as.query(api.comments.list, { postId })).toEqual([]);
+    expect((await bob.as.query(api.comments.list, { postId, paginationOpts: firstPage })).page).toEqual([]);
     await expect(
       bob.as.mutation(api.comments.add, { postId, body: "still here?" }),
     ).rejects.toThrow(/not found/i);
@@ -569,6 +569,183 @@ describe("pair collapse", () => {
     expect(list.some((f: any) => f.userId === bob.userId)).toBe(true);
     await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
     expect(await alice.as.query(api.friends.list, {})).toEqual([]);
+  });
+});
+
+describe("privacy, reports, stories, events, search", () => {
+  it("friends-only bio is hidden from strangers", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    await alice.as.mutation(api.profiles.update, {
+      bio: "secret bio",
+      bioAudience: "friends",
+    });
+    const view = await mallory.as.query(api.profiles.view, { userId: alice.userId });
+    expect(view?.bio).toBeUndefined();
+  });
+
+  it("hidden friends list is empty for non-friends", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const mallory = await actor(t, "Mallory");
+    await befriend(alice, bob);
+    await alice.as.mutation(api.profiles.update, { friendsListPublic: false });
+    expect(await mallory.as.query(api.friends.list, { userId: alice.userId })).toEqual([]);
+    expect((await bob.as.query(api.friends.list, { userId: alice.userId })).map((f: any) => f.userId)).toContain(bob.userId);
+  });
+
+  it("message edit stamps editedAt; hide drops the thread from my list", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const conv = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    await alice.as.mutation(api.messages.send, { conversationId: conv, body: "draft" });
+    const thread = await alice.as.query(api.messages.list, {
+      conversationId: conv, paginationOpts: firstPage,
+    });
+    await alice.as.mutation(api.messages.edit, { id: thread.page[0]._id, body: "edited" });
+    const after = await alice.as.query(api.messages.list, {
+      conversationId: conv, paginationOpts: firstPage,
+    });
+    expect(after.page[0].body).toBe("edited");
+    expect(after.page[0].editedAt).toBeTruthy();
+    await alice.as.mutation(api.messages.hide, { conversationId: conv });
+    expect(await alice.as.query(api.messages.myConversations, {})).toEqual([]);
+    await bob.as.mutation(api.messages.send, { conversationId: conv, body: "ping" });
+    expect((await alice.as.query(api.messages.myConversations, {})).map((c: any) => c.conversationId)).toContain(conv);
+  });
+
+  it("stories expire from the feed after 24h and honor audience", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const mallory = await actor(t, "Mallory");
+    await befriend(alice, bob);
+    const id = await alice.as.mutation(api.stories.create, {
+      body: "hi friends", audience: "friends",
+    });
+    expect((await bob.as.query(api.stories.feed, {})).some((s: any) => s._id === id)).toBe(true);
+    expect((await mallory.as.query(api.stories.feed, {})).some((s: any) => s._id === id)).toBe(false);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(id, { expiresAt: Date.now() - 1 });
+    });
+    expect((await bob.as.query(api.stories.feed, {})).some((s: any) => s._id === id)).toBe(false);
+  });
+
+  it("event host is going; others can RSVP interested", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const eventId = await alice.as.mutation(api.events.create, {
+      title: "Picnic", description: "park", startAt: Date.now() + 60_000,
+    });
+    await bob.as.mutation(api.events.rsvp, { eventId, status: "interested" });
+    const list = await bob.as.query(api.events.upcoming, {});
+    const row = list.find((e: any) => e._id === eventId);
+    expect(row?.going).toBe(1);
+    expect(row?.interested).toBe(1);
+    expect(row?.myRsvp).toBe("interested");
+  });
+
+  it("reports can be withdrawn by the reporter", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const id = await alice.as.mutation(api.reports.create, {
+      targetUserId: bob.userId, reason: "spam",
+    });
+    await alice.as.mutation(api.reports.withdraw, { id });
+    const mine = await alice.as.query(api.reports.mine, {});
+    expect(mine[0].status).toBe("closed");
+  });
+
+  it("operator can review the queue when OPERATOR_USER_IDS matches", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const previous = process.env.OPERATOR_USER_IDS;
+    process.env.OPERATOR_USER_IDS = alice.userId;
+    try {
+      const id = await bob.as.mutation(api.reports.create, {
+        targetUserId: alice.userId, reason: "abuse",
+      });
+      const queue = await alice.as.query(api.reports.queue, {});
+      expect(queue.some((r: any) => r._id === id)).toBe(true);
+      await alice.as.mutation(api.reports.review, { id, status: "closed" });
+      expect(await alice.as.query(api.reports.queue, {})).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.OPERATOR_USER_IDS;
+      else process.env.OPERATOR_USER_IDS = previous;
+    }
+  });
+
+  it("post search respects friends-only visibility", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const mallory = await actor(t, "Mallory");
+    await alice.as.mutation(api.posts.create, {
+      body: "unique-search-token-friends", audience: "friends",
+    });
+    expect(await mallory.as.query(api.posts.search, { q: "unique-search-token-friends" })).toEqual([]);
+    expect(
+      (await alice.as.query(api.posts.search, { q: "unique-search-token-friends" })).map((p: any) => p.body),
+    ).toContain("unique-search-token-friends");
+  });
+
+  it("group posts are members-only", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const mallory = await actor(t, "Mallory");
+    const groupId = await alice.as.mutation(api.groups.create, {
+      name: "Private club", description: "", kind: "group",
+    });
+    await bob.as.mutation(api.groups.join, { groupId });
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "club only", audience: "public", groupId,
+    });
+    expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
+    expect(await mallory.as.query(api.posts.get, { id: postId })).toBeNull();
+  });
+
+  it("discover lists groups the viewer has not joined", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const groupId = await alice.as.mutation(api.groups.create, {
+      name: "Open club", description: "", kind: "group",
+    });
+    const found = await bob.as.query(api.groups.discover, {});
+    expect(found.some((g: any) => g._id === groupId)).toBe(true);
+    expect(await alice.as.query(api.groups.discover, {})).toEqual([]);
+  });
+});
+
+describe("mute and groups", () => {
+  it("mute hides public posts from the muter's feed only", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "loud", audience: "public",
+    });
+    await bob.as.mutation(api.mutes.set, { userId: alice.userId, muted: true });
+    const feed = await bob.as.query(api.posts.feed, { paginationOpts: firstPage });
+    expect(feed.page.map((p: any) => p._id)).not.toContain(postId);
+    expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
+  });
+
+  it("group create makes the creator an owner", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const id = await alice.as.mutation(api.groups.create, {
+      name: "Book club", description: "", kind: "group",
+    });
+    const list = await alice.as.query(api.groups.list, {});
+    expect(list.some((g: any) => g._id === id && g.role === "owner")).toBe(true);
   });
 });
 

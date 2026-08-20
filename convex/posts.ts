@@ -12,12 +12,20 @@ import {
   emptyReactionCounts,
   enrichPost,
   friendIdsOf,
+  groupIdsOf,
   isBlockedEitherWay,
   loadVisiblePost,
+  mutedPairIds,
   postVisibleTo,
   requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
+import {
+  assertImage,
+  assertVideo,
+  claimUpload,
+  registerOwnedUpload,
+} from "./lib/uploads";
 
 async function paginateVisiblePosts(
   ctx: QueryCtx,
@@ -28,11 +36,14 @@ async function paginateVisiblePosts(
   if (authorId && authorId !== viewerId && (await isBlockedEitherWay(ctx, viewerId, authorId))) {
     return { page: [], isDone: true, continueCursor: "" };
   }
-  const [friendList, blockedIds] = await Promise.all([
+  const [friendList, blockedIds, mutedIds, groupList] = await Promise.all([
     friendIdsOf(ctx, viewerId),
     blockedPairIds(ctx, viewerId),
+    mutedPairIds(ctx, viewerId),
+    groupIdsOf(ctx, viewerId),
   ]);
   const friendIds = new Set(friendList);
+  const memberGroupIds = new Set(groupList);
   const target = Math.max(1, paginationOpts.numItems);
   const visible: Doc<"posts">[] = [];
   const cursorTime = paginationOpts.cursor ? Number(paginationOpts.cursor) : null;
@@ -53,7 +64,17 @@ async function paginateVisiblePosts(
   let visibleCount = 0;
   for (const post of raw) {
     if (cursorTime !== null && post.createdAt >= cursorTime) continue;
-    if (!postVisibleTo(post, viewerId, friendIds, blockedIds)) continue;
+    if (
+      !postVisibleTo(
+        post,
+        viewerId,
+        friendIds,
+        blockedIds,
+        authorId ? undefined : mutedIds,
+        memberGroupIds,
+      )
+    )
+      continue;
     visibleCount += 1;
     if (visible.length < target) visible.push(post);
   }
@@ -72,21 +93,6 @@ async function paginateVisiblePosts(
 }
 
 export const MAX_POST_LENGTH = 5000;
-const MAX_IMAGE_BYTES = 5_000_000;
-
-async function assertImage(
-  ctx: { db: { system: { get: (id: Id<"_storage">) => Promise<{ contentType?: string; size?: number } | null> } } },
-  imageId: Id<"_storage">,
-) {
-  const meta = await ctx.db.system.get(imageId);
-  if (!meta) throw new Error("Image not found");
-  if (meta.contentType && !meta.contentType.startsWith("image/")) {
-    throw new Error("File must be an image");
-  }
-  if (typeof meta.size === "number" && meta.size > MAX_IMAGE_BYTES) {
-    throw new Error("Image too large (max 5 MB)");
-  }
-}
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -102,21 +108,16 @@ export const registerImage = mutation({
   handler: async (ctx, { storageId }) => {
     const userId = await requireActiveUser(ctx);
     await assertImage(ctx, storageId);
-    const existing = await ctx.db
-      .query("uploads")
-      .withIndex("by_storage", (q) => q.eq("storageId", storageId))
-      .first();
-    if (existing) {
-      if (existing.userId !== userId) throw new Error("Image not found");
-      return storageId;
-    }
-    await ctx.db.insert("uploads", {
-      storageId,
-      userId,
-      used: false,
-      createdAt: Date.now(),
-    });
-    return storageId;
+    return await registerOwnedUpload(ctx, userId, storageId);
+  },
+});
+
+export const registerVideo = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    const userId = await requireActiveUser(ctx);
+    await assertVideo(ctx, storageId);
+    return await registerOwnedUpload(ctx, userId, storageId);
   },
 });
 
@@ -125,23 +126,32 @@ export const create = mutation({
     body: v.string(),
     audience: audienceValidator,
     imageId: v.optional(v.id("_storage")),
+    videoId: v.optional(v.id("_storage")),
+    groupId: v.optional(v.id("groups")),
   },
-  handler: async (ctx, { body, audience, imageId }) => {
+  handler: async (ctx, { body, audience, imageId, videoId, groupId }) => {
     const authorId = await requireActiveUser(ctx);
     const trimmed = body.trim();
-    if (!trimmed && !imageId) throw new Error("Post cannot be empty");
+    if (!trimmed && !imageId && !videoId) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
+    if (imageId && videoId) throw new Error("Attach a photo or a video, not both");
     if (imageId) {
       await assertImage(ctx, imageId);
-      const upload = await ctx.db
-        .query("uploads")
-        .withIndex("by_storage", (q) => q.eq("storageId", imageId))
-        .first();
-      if (!upload || upload.userId !== authorId || upload.used) {
-        throw new Error("Image not found");
-      }
-      await ctx.db.patch(upload._id, { used: true });
+      await claimUpload(ctx, authorId, imageId);
+    }
+    if (videoId) {
+      await assertVideo(ctx, videoId);
+      await claimUpload(ctx, authorId, videoId);
+    }
+    if (groupId) {
+      const membership = await ctx.db
+        .query("groupMembers")
+        .withIndex("by_group_user", (q) =>
+          q.eq("groupId", groupId).eq("userId", authorId),
+        )
+        .unique();
+      if (!membership) throw new Error("Group not found");
     }
     await takeRate(ctx, authorId, "post");
     // Plan gate (SaaS spine): the free tier caps lifetime posts; Pro is
@@ -158,6 +168,8 @@ export const create = mutation({
       audience,
       createdAt: Date.now(),
       imageId,
+      videoId,
+      groupId,
       commentCount: 0,
       reactionCounts: emptyReactionCounts(),
     });
@@ -204,6 +216,32 @@ export const update = mutation({
   },
 });
 
+export const search = query({
+  args: { q: v.string() },
+  handler: async (ctx, { q }) => {
+    const viewerId = await getAuthUserId(ctx);
+    if (!viewerId) return [];
+    const term = q.trim();
+    if (!term) return [];
+    const [friendList, blockedIds, mutedIds, groupList] = await Promise.all([
+      friendIdsOf(ctx, viewerId),
+      blockedPairIds(ctx, viewerId),
+      mutedPairIds(ctx, viewerId),
+      groupIdsOf(ctx, viewerId),
+    ]);
+    const friendIds = new Set(friendList);
+    const memberGroupIds = new Set(groupList);
+    const hits = await ctx.db
+      .query("posts")
+      .withSearchIndex("search_body", (s) => s.search("body", term))
+      .take(20);
+    const visible = hits.filter((p) =>
+      postVisibleTo(p, viewerId, friendIds, blockedIds, mutedIds, memberGroupIds),
+    );
+    return await Promise.all(visible.slice(0, 8).map((p) => enrichPost(ctx, p, viewerId)));
+  },
+});
+
 export const get = query({
   args: { id: v.id("posts") },
   handler: async (ctx, { id }) => {
@@ -241,6 +279,7 @@ export const remove = mutation({
     if (post.authorId !== userId)
       throw new Error("Only the author can delete a post");
     if (post.imageId) await ctx.storage.delete(post.imageId);
+    if (post.videoId) await ctx.storage.delete(post.videoId);
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", id))

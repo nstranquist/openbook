@@ -73,10 +73,10 @@ async function main() {
   const friendsPostId = await alice.client.mutation(fn("posts:create"), {
     body: `friends-only-${stamp}`, audience: "friends",
   });
-  await alice.client.mutation(fn("posts:create"), {
+  const publicPostId = await alice.client.mutation(fn("posts:create"), {
     body: `public-${stamp}`, audience: "public",
   });
-  check("posts created", !!friendsPostId);
+  check("posts created", !!friendsPostId && !!publicPostId);
 
   // 5) Feed visibility: friend sees both, stranger only the public one.
   const bobFeed = await bob.client.query(fn("posts:feed"), { paginationOpts: PAGE });
@@ -94,8 +94,11 @@ async function main() {
     strangerCommentRejected = true;
   }
   check("stranger cannot comment on a friends-only post", strangerCommentRejected);
-  const leakedComments = await mallory.client.query(fn("comments:list"), { postId: friendsPostId });
-  check("stranger cannot list friends-only comments", leakedComments.length === 0);
+  const leakedComments = await mallory.client.query(fn("comments:list"), {
+    postId: friendsPostId,
+    paginationOpts: PAGE,
+  });
+  check("stranger cannot list friends-only comments", leakedComments.page.length === 0);
   let strangerReactRejected = false;
   try {
     await mallory.client.mutation(fn("reactions:toggle"), { postId: friendsPostId, kind: "like" });
@@ -103,6 +106,56 @@ async function main() {
     strangerReactRejected = true;
   }
   check("stranger cannot react to a friends-only post", strangerReactRejected);
+
+  await alice.client.mutation(fn("blocks:set"), { userId: mallory.userId, blocked: true });
+  const malloryAfterBlock = await mallory.client.query(fn("posts:get"), { id: friendsPostId });
+  check("block hides the author's friends-only post", malloryAfterBlock === null);
+  await alice.client.mutation(fn("blocks:set"), { userId: mallory.userId, blocked: false });
+
+  await mallory.client.mutation(fn("mutes:set"), { userId: alice.userId, muted: true });
+  const malloryMutedFeed = await mallory.client.query(fn("posts:feed"), { paginationOpts: PAGE });
+  check("mute hides public posts from the muter's feed",
+    !malloryMutedFeed.page.some((p) => p.body === `public-${stamp}`));
+  check("mute does not hide the post permalink",
+    !!(await mallory.client.query(fn("posts:get"), { id: publicPostId })));
+  await mallory.client.mutation(fn("mutes:set"), { userId: alice.userId, muted: false });
+
+  const groupId = await alice.client.mutation(fn("groups:create"), {
+    name: `Club ${stamp}`, description: "", kind: "group",
+  });
+  await bob.client.mutation(fn("groups:join"), { groupId });
+  const groupPostId = await alice.client.mutation(fn("posts:create"), {
+    body: `group-${stamp}`, audience: "public", groupId,
+  });
+  check("group member can see a group post",
+    !!(await bob.client.query(fn("posts:get"), { id: groupPostId })));
+  check("non-member cannot see a group post",
+    (await mallory.client.query(fn("posts:get"), { id: groupPostId })) === null);
+
+  try {
+    const uploadUrl = await alice.client.mutation(fn("posts:generateUploadUrl"), {});
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const uploaded = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: png,
+    });
+    check("image upload accepted", uploaded.ok, `HTTP ${uploaded.status}`);
+    if (uploaded.ok) {
+      const { storageId } = await uploaded.json();
+      await alice.client.mutation(fn("posts:registerImage"), { storageId });
+      const photoId = await alice.client.mutation(fn("posts:create"), {
+        body: `photo-${stamp}`, audience: "public", imageId: storageId,
+      });
+      const photo = await bob.client.query(fn("posts:get"), { id: photoId });
+      check("photo post has an image URL", !!photo?.imageUrl);
+    }
+  } catch (err) {
+    check("image upload accepted", false, err instanceof Error ? err.message : String(err));
+  }
 
   // 6) Reactions + comments, with denormalized tallies + notifications.
   await bob.client.mutation(fn("reactions:toggle"), { postId: friendsPostId, kind: "love" });
@@ -147,7 +200,7 @@ async function main() {
   // 9) Billing spine still reports the plan + usage (posts gate).
   const plan = await alice.client.query(fn("billing:getMyPlan"), {});
   check("free plan reports post usage against the 100 cap",
-    plan?.plan === "free" && plan?.limits?.posts === 100 && plan?.usage?.posts === 1,
+    plan?.plan === "free" && plan?.limits?.posts === 100 && plan?.usage?.posts >= 1,
     JSON.stringify(plan));
 
   console.log(`\n${passed} checks passed${failures.length ? `, ${failures.length} FAILED` : ""}`);

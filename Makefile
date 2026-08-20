@@ -1,4 +1,4 @@
-.PHONY: help install test typecheck build verify verify-publication publish-ready export-publication clean
+.PHONY: help install test typecheck build verify verify-publication publish-ready export-publication desktop clean
 
 help:
 	@echo "openbook local targets:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make test | typecheck | build"
 	@echo "  make verify               # typecheck + test + build"
 	@echo "  make verify-publication   # full publication gate (incl. gitleaks)"
+	@echo "  make desktop              # Chrome/Edge app-mode window"
 	@echo "  make export-publication OUT=/path/to/empty-dir"
 
 install:
@@ -27,6 +28,9 @@ verify-publication:
 
 # Local publication gate alias (no remote push).
 publish-ready: verify-publication
+
+desktop:
+	bash scripts/open-desktop.sh
 
 # Human-gated clean tree for public publish (OUT must be empty absolute path).
 export-publication:

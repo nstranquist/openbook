@@ -19,26 +19,27 @@ signup and post. It is the reviewed evidence declared in
 ## Features
 
 - **Identity** — Convex Auth (email+password, optional GitHub/Google, password
-  reset when `RESEND_API_KEY` is set). Auto-provisioned profile with
-  deterministic-hue avatar/cover. Settings can close the account.
+  reset and sign-up verify when `RESEND_API_KEY` is set). Password change while
+  signed in. Auto-provisioned profile with deterministic-hue avatar/cover.
+  Settings can close the account (sessions, refresh tokens, Stripe cancel).
 - **Friend graph** — request → accept lifecycle (decline / cancel / unfriend),
   cross-request auto-accept, *People You May Know* ranked by mutual friends,
-  and block/unblock (hides posts and blocks new requests in both directions).
+  mute (feed only), and block/unblock (hides posts and blocks new requests).
 - **Feed** — paginated, newest-first, server-side visibility: `friends`-audience
-  posts reach only the author's friends; `public` posts reach everyone. Authors
-  can edit a post and attach an image (Convex storage; URL is issued only after
-  visibility). Write paths are rate-limited.
+  posts reach only the author's friends; `public` posts reach everyone; group
+  posts reach members. Authors can edit a post and attach a photo or video
+  (owned Convex storage; client strips still-image EXIF). Unused blobs GC hourly.
+- **Stories, groups, events** — 24h stories, groups/pages with member feeds,
+  events with going/interested RSVP.
 - **Reactions** — the classic six (👍❤️😆😮😢😡), one per user per post,
   hover picker, denormalized tallies kept exact in the same transaction.
-- **Comments** — inline threads with exact counts and owner/author delete rights.
-  Comment and reaction APIs use the same visibility rule as the feed.
-- **Notifications** — bell with unread badge for friend requests, accepts,
-  reactions, and comments; mark-read / mark-all-read.
-- **Messages** — friends-only threads, realtime delivery, unread accounting,
-  conversation previews, sender-delete. Existing threads stay readable after unfriend.
-- **People search** — full-text search index over display names, live from the nav bar.
-- **SaaS spine** (from the scaffold) — Stripe-mirrored subscriptions; the free
-  tier caps lifetime posts at 100, Pro lifts it (`convex/lib/plans.ts`).
+- **Comments** — paginated threads with exact counts and owner/author delete.
+- **Notifications** — in-app bell plus email when Resend is set. Reports with
+  an operator queue (`OPERATOR_USER_IDS`).
+- **Messages** — friends-only threads, edit/hide, last-read receipts, search.
+- **Search** — people, posts, and messages from the nav / messenger.
+- **Clients** — installable PWA; `scripts/open-desktop.sh` for a desktop window.
+- **SaaS spine** — Stripe-mirrored subscriptions; free cap 100 posts, Pro unlimited.
 
 ## Usage
 
@@ -48,6 +49,8 @@ signup and post. It is the reviewed evidence declared in
 | Cloud | `npx convex dev --once && pnpm auth:setup && pnpm dev` |
 | Tests | `make test` or `pnpm test` |
 | Live check | `node scripts/verify-live.mjs` against a running Convex URL |
+| Desktop window | `bash scripts/open-desktop.sh` (Chrome/Edge app mode) |
+| Backup | `bash scripts/export-backup.sh /absolute/empty/dir` |
 | Publish gate | `make publish-ready` |
 
 Accounts, posts, and screenshots in this tree are synthetic. Do not commit live Stripe keys or real user data.
@@ -79,8 +82,8 @@ Or against Convex cloud: `npx convex dev --once && pnpm auth:setup && pnpm dev`.
 | Gate | Command | Result |
 |---|---|---|
 | Types | `pnpm typecheck` | 2/2 packages clean |
-| Unit (simulated backend) | `pnpm test` / `make test` | 37/37 (social rules, visibility on comments/reactions, feed fill, billing, Stripe) |
-| Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 22 checks — 3 users over the wire: search → friend → feed visibility → stranger cannot comment/react → react → comment → notify → DM unread → delete cascade |
+| Unit (simulated backend) | `pnpm test` / `make test` | convex-test social rules (visibility, mute, groups, reports, stories, events) |
+| Live E2E (real backend) | `CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs` | 3 users over the wire: search → friend → feed visibility → block → mute → group post → image upload → react → comment → notify → DM unread → delete cascade |
 | Production build | `pnpm build` | Vite production bundle |
 | Publication boundary | `pnpm verify:publication` / `make publish-ready` | Go publication-tool tests, types, application tests, build, production dependency licenses, and both secret-scan modes |
 

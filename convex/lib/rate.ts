@@ -10,6 +10,10 @@ export const RATE_LIMITS = {
   friend_request: 20,
   block: 30,
   upload: 20,
+  story: 12,
+  report: 10,
+  group: 8,
+  event: 8,
 } as const;
 
 export async function takeRate(

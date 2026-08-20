@@ -1,11 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   areFriends,
   blockedPairIds,
   friendshipForPair,
   hueFromString,
+  isOperator,
   pairKey,
   profileOf,
 } from "./lib/social";
@@ -41,8 +43,24 @@ export const me = query({
     if (!userId) return null;
     const profile = await profileOf(ctx, userId);
     if (!profile) return null;
-    if (profile.deletedAt) return { ...profile, isMe: true, deleted: true as const };
-    return { ...profile, isMe: true, deleted: false as const };
+    const user = await ctx.db.get(userId);
+    const email = (user as { email?: string } | null)?.email ?? null;
+    if (profile.deletedAt) {
+      return {
+        ...profile,
+        isMe: true,
+        deleted: true as const,
+        email,
+        isOperator: false,
+      };
+    }
+    return {
+      ...profile,
+      isMe: true,
+      deleted: false as const,
+      email,
+      isOperator: isOperator(userId),
+    };
   },
 });
 
@@ -81,7 +99,28 @@ export const view = query({
             edge.requesterId === viewerId ? "outgoing_request" : "incoming_request";
       }
     }
-    return { ...profile, isMe: userId === viewerId, relationship };
+    const hideBio =
+      userId !== viewerId &&
+      profile.bioAudience === "friends" &&
+      relationship !== "friends";
+    const muted =
+      userId !== viewerId
+        ? (
+            await ctx.db
+              .query("mutes")
+              .withIndex("by_muter", (q) => q.eq("muterId", viewerId))
+              .collect()
+          ).some((row) => row.mutedId === userId)
+        : false;
+    return {
+      ...profile,
+      isMe: userId === viewerId,
+      relationship,
+      muted,
+      bio: hideBio ? undefined : profile.bio,
+      work: hideBio ? undefined : profile.work,
+      location: hideBio ? undefined : profile.location,
+    };
   },
 });
 
@@ -91,6 +130,8 @@ export const update = mutation({
     bio: v.optional(v.string()),
     work: v.optional(v.string()),
     location: v.optional(v.string()),
+    bioAudience: v.optional(v.union(v.literal("public"), v.literal("friends"))),
+    friendsListPublic: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -98,7 +139,7 @@ export const update = mutation({
     const profile = await profileOf(ctx, userId);
     if (!profile) throw new Error("Profile missing — call profiles.ensure first");
     if (profile.deletedAt) throw new Error("This account is closed");
-    const patch: Record<string, string> = {};
+    const patch: Record<string, string | boolean> = {};
     if (args.displayName !== undefined) {
       const name = args.displayName.trim();
       if (!name) throw new Error("Display name cannot be empty");
@@ -111,6 +152,10 @@ export const update = mutation({
         if (value.length > 500) throw new Error(`${field} too long (max 500)`);
         patch[field] = value.trim();
       }
+    }
+    if (args.bioAudience !== undefined) patch.bioAudience = args.bioAudience;
+    if (args.friendsListPublic !== undefined) {
+      (patch as { friendsListPublic?: boolean }).friendsListPublic = args.friendsListPublic;
     }
     await ctx.db.patch(profile._id, patch);
   },
@@ -157,7 +202,23 @@ export const deleteAccount = mutation({
       .query("authSessions")
       .withIndex("userId", (q) => q.eq("userId", me))
       .collect();
-    for (const session of sessions) await ctx.db.delete(session._id);
+    for (const session of sessions) {
+      const tokens = await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+        .collect();
+      for (const token of tokens) await ctx.db.delete(token._id);
+      await ctx.db.delete(session._id);
+    }
+    const sub = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .unique();
+    if (sub?.stripeSubscriptionId) {
+      await ctx.scheduler.runAfter(0, internal.billing.cancelAtStripe, {
+        stripeSubscriptionId: sub.stripeSubscriptionId,
+      });
+    }
 
     const posts = await ctx.db
       .query("posts")
@@ -248,16 +309,99 @@ export const deleteAccount = mutation({
       .collect();
     for (const row of [...asBlocker, ...asBlocked]) await ctx.db.delete(row._id);
 
+    const myMutes = await ctx.db
+      .query("mutes")
+      .withIndex("by_muter", (q) => q.eq("muterId", me))
+      .collect();
+    for (const row of myMutes) await ctx.db.delete(row._id);
+
+    const myStories = await ctx.db
+      .query("stories")
+      .withIndex("by_author", (q) => q.eq("authorId", me))
+      .collect();
+    for (const story of myStories) {
+      if (story.imageId) await ctx.storage.delete(story.imageId).catch(() => undefined);
+      await ctx.db.delete(story._id);
+    }
+
+    const memberships = await ctx.db
+      .query("groupMembers")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .collect();
+    for (const row of memberships) await ctx.db.delete(row._id);
+
+    const hosted = await ctx.db
+      .query("events")
+      .withIndex("by_host", (q) => q.eq("hostId", me))
+      .collect();
+    for (const event of hosted) {
+      const rsvps = await ctx.db
+        .query("eventRsvps")
+        .withIndex("by_event", (q) => q.eq("eventId", event._id))
+        .collect();
+      for (const rsvp of rsvps) await ctx.db.delete(rsvp._id);
+      await ctx.db.delete(event._id);
+    }
+    const myRsvps = await ctx.db
+      .query("eventRsvps")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .collect();
+    for (const row of myRsvps) await ctx.db.delete(row._id);
+
+    const myReports = await ctx.db
+      .query("reports")
+      .withIndex("by_reporter", (q) => q.eq("reporterId", me))
+      .collect();
+    for (const row of myReports) await ctx.db.delete(row._id);
+
+    const pushes = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .collect();
+    for (const row of pushes) await ctx.db.delete(row._id);
+
+    const myUploads = await ctx.db
+      .query("uploads")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .collect();
+    for (const row of myUploads) {
+      if (!row.used) await ctx.storage.delete(row.storageId).catch(() => undefined);
+      await ctx.db.delete(row._id);
+    }
+
+    const memberRows = await ctx.db
+      .query("conversationMembers")
+      .withIndex("by_user", (q) => q.eq("userId", me))
+      .collect();
+    for (const member of memberRows) {
+      const conversation = await ctx.db.get(member.conversationId);
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", member.conversationId),
+        )
+        .collect();
+      for (const message of messages) {
+        if (message.senderId === me) await ctx.db.delete(message._id);
+      }
+      await ctx.db.delete(member._id);
+      if (conversation) {
+        const others = await ctx.db
+          .query("conversationMembers")
+          .withIndex("by_conversation_user", (q) =>
+            q.eq("conversationId", conversation._id),
+          )
+          .collect();
+        if (others.length === 0) await ctx.db.delete(conversation._id);
+      }
+    }
+
     const rates = await ctx.db
       .query("rateLimits")
       .withIndex("by_user_action", (q) => q.eq("userId", me))
       .collect();
     for (const row of rates) await ctx.db.delete(row._id);
 
-    const sub = await ctx.db
-      .query("subscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", me))
-      .unique();
     if (sub) await ctx.db.delete(sub._id);
 
     await ctx.db.patch(profile._id, {

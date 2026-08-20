@@ -1,6 +1,6 @@
 import { api } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
@@ -27,6 +27,14 @@ function LeftRail() {
       <Link to="/messages" className="ob-menu-item">
         <span className="ob-iconbtn" style={{ fontSize: 18 }}>💬</span>
         <span className="ob-bold">Messages</span>
+      </Link>
+      <Link to="/groups" className="ob-menu-item">
+        <span className="ob-iconbtn" style={{ fontSize: 18 }}>⬡</span>
+        <span className="ob-bold">Groups</span>
+      </Link>
+      <Link to="/events" className="ob-menu-item">
+        <span className="ob-iconbtn" style={{ fontSize: 18 }}>📅</span>
+        <span className="ob-bold">Events</span>
       </Link>
     </div>
   );
@@ -106,6 +114,51 @@ function FeedSkeleton() {
   );
 }
 
+function StoriesStrip() {
+  const stories = useQuery(api.stories.feed) ?? [];
+  const create = useMutation(api.stories.create);
+  const [draft, setDraft] = useState("");
+  const [audience, setAudience] = useState<"public" | "friends">("friends");
+  return (
+    <div className="ob-stack" style={{ gap: 8 }}>
+      <div className="ob-card ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <input
+          className="g-input"
+          placeholder="Add a story"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-label="Story text"
+        />
+        <select className="ob-select" value={audience} onChange={(e) => setAudience(e.target.value as "public" | "friends")}>
+          <option value="friends">Friends</option>
+          <option value="public">Public</option>
+        </select>
+        <button
+          className="ob-btn ob-btn--sm ob-btn--primary"
+          disabled={!draft.trim()}
+          onClick={() =>
+            void runOrToast(create({ body: draft, audience }), "Could not post story").then((ok) => {
+              if (ok !== undefined) setDraft("");
+            })
+          }
+        >
+          Share
+        </button>
+      </div>
+      {stories.length > 0 && (
+        <div className="ob-row" style={{ overflowX: "auto", gap: 10, padding: "4px 0" }}>
+          {stories.map((s) => (
+            <div key={s._id} className="ob-card" style={{ minWidth: 120, padding: 8 }}>
+              <div className="ob-bold ob-small">{s.author.displayName}</div>
+              <div className="ob-small">{s.body}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FeedPage() {
   const me = useQuery(api.profiles.me);
   const { results, status, loadMore } = usePaginatedQuery(
@@ -124,6 +177,7 @@ export function FeedPage() {
     <div className="ob-grid">
       <LeftRail />
       <div className="ob-stack">
+        <StoriesStrip />
         <Composer />
         {loading ? (
           <div aria-busy="true" aria-label="Loading your feed">

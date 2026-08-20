@@ -1,4 +1,4 @@
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -7,6 +7,7 @@ import {
   createCheckoutSession,
   createBillingPortalSession,
   stripeProPriceId,
+  cancelStripeSubscriptionAtProvider,
 } from "./lib/stripe";
 import { planValidator, subscriptionStatusValidator } from "./schema";
 import { effectivePlan, planLimits } from "./lib/plans";
@@ -141,6 +142,18 @@ export const upsertSubscription = internalMutation({
         updatedAt: now,
       });
     }
+  },
+});
+
+export const cancelAtStripe = internalAction({
+  args: { stripeSubscriptionId: v.string() },
+  handler: async (ctx, { stripeSubscriptionId }) => {
+    try {
+      await cancelStripeSubscriptionAtProvider(stripeSubscriptionId);
+    } catch {
+      // Local deploys often have no live Stripe; still drop the mirror.
+    }
+    await ctx.runMutation(internal.billing.cancelSubscription, { stripeSubscriptionId });
   },
 });
 

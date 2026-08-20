@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authorCard, loadVisiblePost, notify, requireActiveUser, requireVisiblePost } from "./lib/social";
@@ -37,24 +38,29 @@ export const add = mutation({
 });
 
 export const list = query({
-  args: { postId: v.id("posts") },
-  handler: async (ctx, { postId }) => {
+  args: { postId: v.id("posts"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { postId, paginationOpts }) => {
     const viewerId = await getAuthUserId(ctx);
-    if (!viewerId) return [];
-    if (!(await loadVisiblePost(ctx, postId, viewerId))) return [];
-    const rows = await ctx.db
+    if (!viewerId) return { page: [], isDone: true, continueCursor: "" };
+    if (!(await loadVisiblePost(ctx, postId, viewerId)))
+      return { page: [], isDone: true, continueCursor: "" };
+    const page = await ctx.db
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", postId))
-      .collect();
-    return await Promise.all(
-      rows.map(async (c) => ({
-        _id: c._id,
-        body: c.body,
-        createdAt: c.createdAt,
-        author: await authorCard(ctx, c.authorId),
-        isMine: c.authorId === viewerId,
-      })),
-    );
+      .order("asc")
+      .paginate(paginationOpts);
+    return {
+      ...page,
+      page: await Promise.all(
+        page.page.map(async (c) => ({
+          _id: c._id,
+          body: c.body,
+          createdAt: c.createdAt,
+          author: await authorCard(ctx, c.authorId),
+          isMine: c.authorId === viewerId,
+        })),
+      ),
+    };
   },
 });
 

@@ -1,48 +1,29 @@
 # Openbook backlog
 
-Living roadmap of what this repo **does not** claim yet. Update when a
-slice ships. Do not mark a row done without a test or live check.
+KEP-001 shipped the in-repo social completeness slice. Remaining work is
+store binaries and a hosted public userbase (KEP-002, KEP-003).
 
-Target: a senior-defensible realtime social product, not a Meta clone.
+## Shipped in-repo (2026-08-20)
 
-## Now (next build slices)
+Email verify when Resend is set. Password change while signed in.
+Stripe cancel + session/refresh wipe on close. Upload occupancy + hourly
+GC. Client EXIF strip. Mute. Profile bio/friends-list privacy. Reports
+with operator review. Comment pagination. Message edit/hide + last-read
++ message search. Pair occupancy locks. Stories (24h). Groups/pages with
+member-only posts. Events + RSVP. Post full-text search. Video on posts.
+Email notify when Resend is set. PWA install. `/status` + `/health`.
+Desktop app-mode script. Backup script.
 
-1. **Email verification on sign-up** — Password `verify` provider; unsigned-up
-   sessions cannot post until the code lands.
-2. **Cancel Stripe on account close** — `deleteAccount` currently drops the
-   local mirror and ignores sessions at Stripe; call the Billing API then
-   invalidate refresh tokens as well as `authSessions`.
-3. **Orphan upload GC** — unused `uploads` rows and storage blobs after
-   Cancel/Escape; a cron or mutation timeout.
-4. **Refresh-token wipe on close** — `authRefreshTokens` still exist after
-   `authSessions` delete.
-5. **Live E2E for block / image / reset** — extend `scripts/verify-live.mjs`.
-6. **CI evidence for images** — convex-test cannot mint storage ids today;
-   add a selfhost check that upload + visibility holds.
+## Still out
 
-## Next (product completeness)
+| Item | Home |
+| --- | --- |
+| Expo / Tauri store binaries | KEP-002 |
+| Hosted production userbase | KEP-003 |
+| Dedicated image CDN | later |
+| Web-push send (subscriptions are stored) | polish |
 
-7. **Password change while signed in** (Settings), not only forgot-password.
-8. **Message edit** and conversation hide/delete for one participant.
-9. **Comment pagination** (today `collect()` on the thread).
-10. **Read receipts** that are actually per-message, if we ever claim them.
-11. **Reports / safety queue** (report post or user, operator review).
-12. **Mute** (hide without blocking friendship).
-13. **Profile privacy** (friends-only bio, hide friend list).
-14. **Unique pair documents** — occupancy row or deterministic id so
-    collapse is a backstop, not the primary invariant.
+## Non-goals
 
-## Later (only if we still want a “full” social app)
-
-15. Albums, stories, groups, pages, events.
-16. Video / multi-image posts; image CDN and EXIF strip.
-17. Push / email notification delivery (not only in-app bell).
-18. Search that is not just display-name FTS (posts, messages).
-19. Mobile / desktop clients (explicitly out of this repo today).
-20. Hosted production deployment and a real user dataset.
-
-## Explicit non-goals
-
-- Meta/Facebook branding, assets, or comparative copy.
-- Claiming a public hosted Openbook service.
-- Treating a green unit suite as production load proof.
+Meta branding. Claiming a public hosted Openbook service from this repo
+until KEP-003 is executed by a human.

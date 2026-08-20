@@ -3,20 +3,24 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "../ui/garrid";
 import { useState } from "react";
 import { Avatar } from "./Avatar";
+import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, stripImageMetadata, uploadStorageFile } from "../lib/media";
 
 // The "What's on your mind?" card. Collapsed = one-line prompt; expanded =
 // textarea + audience picker. Audience is enforced server-side (posts.feed);
 // the picker here just chooses it.
-export function Composer() {
+export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
   const me = useQuery(api.profiles.me);
   const createPost = useMutation(api.posts.create);
   const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
   const registerImage = useMutation(api.posts.registerImage);
+  const registerVideo = useMutation(api.posts.registerVideo);
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<"public" | "friends">("public");
   const [imageId, setImageId] = useState<Id<"_storage"> | null>(null);
+  const [videoId, setVideoId] = useState<Id<"_storage"> | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,15 +28,18 @@ export function Composer() {
 
   function resetComposer() {
     if (preview) URL.revokeObjectURL(preview);
+    if (videoPreview) URL.revokeObjectURL(videoPreview);
     setBody("");
     setImageId(null);
+    setVideoId(null);
     setPreview(null);
+    setVideoPreview(null);
     setError(null);
     setOpen(false);
   }
 
   async function submit() {
-    if (!body.trim() && !imageId) {
+    if (!body.trim() && !imageId && !videoId) {
       setError("Say something first");
       return;
     }
@@ -44,7 +51,12 @@ export function Composer() {
     setBusy(true);
     setError(null);
     try {
-      await createPost({ ...parsed.data, imageId: imageId ?? undefined });
+      await createPost({
+        ...parsed.data,
+        imageId: imageId ?? undefined,
+        videoId: videoId ?? undefined,
+        groupId,
+      });
       resetComposer();
       toast("Posted", "ok");
     } catch (err) {
@@ -82,6 +94,9 @@ export function Composer() {
           {preview && (
             <img src={preview} alt="" className="ob-post-image" />
           )}
+          {videoPreview && (
+            <video src={videoPreview} className="ob-post-image" controls />
+          )}
           {error && <div className="ob-small" style={{ color: "var(--danger)" }}>{error}</div>}
           <div className="ob-row" style={{ justifyContent: "space-between", marginTop: 8 }}>
             <select
@@ -108,25 +123,60 @@ export function Composer() {
                       setError("File must be an image");
                       return;
                     }
-                    if (file.size > 5_000_000) {
+                    if (file.size > MAX_IMAGE_BYTES) {
                       setError("Image too large (max 5 MB)");
                       return;
                     }
+                    if (preview) URL.revokeObjectURL(preview);
+                    if (videoPreview) URL.revokeObjectURL(videoPreview);
+                    setVideoId(null);
+                    setVideoPreview(null);
                     setPreview(URL.createObjectURL(file));
                     void (async () => {
                       try {
-                        const uploadUrl = await generateUploadUrl();
-                        const res = await fetch(uploadUrl, {
-                          method: "POST",
-                          headers: { "Content-Type": file.type },
-                          body: file,
-                        });
-                        if (!res.ok) throw new Error("Upload failed");
-                        const json = (await res.json()) as { storageId: Id<"_storage"> };
-                        await registerImage({ storageId: json.storageId });
-                        setImageId(json.storageId);
+                        const blob = await stripImageMetadata(file);
+                        const prepared = new File([blob], file.name, { type: blob.type || file.type });
+                        const storageId = await uploadStorageFile(prepared, generateUploadUrl);
+                        await registerImage({ storageId });
+                        setImageId(storageId);
                       } catch (err) {
                         setPreview(null);
+                        setError(err instanceof Error ? err.message : "Upload failed");
+                      }
+                    })();
+                  }}
+                />
+              </label>
+              <label className="ob-btn ob-btn--sm" style={{ cursor: "pointer" }}>
+                Video
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    if (!file.type.startsWith("video/")) {
+                      setError("File must be a video");
+                      return;
+                    }
+                    if (file.size > MAX_VIDEO_BYTES) {
+                      setError("Video too large (max 32 MB)");
+                      return;
+                    }
+                    if (preview) URL.revokeObjectURL(preview);
+                    if (videoPreview) URL.revokeObjectURL(videoPreview);
+                    setImageId(null);
+                    setPreview(null);
+                    setVideoPreview(URL.createObjectURL(file));
+                    void (async () => {
+                      try {
+                        const storageId = await uploadStorageFile(file, generateUploadUrl);
+                        await registerVideo({ storageId });
+                        setVideoId(storageId);
+                      } catch (err) {
+                        setVideoPreview(null);
                         setError(err instanceof Error ? err.message : "Upload failed");
                       }
                     })();
@@ -138,7 +188,7 @@ export function Composer() {
               </button>
               <button
                 className="ob-btn ob-btn--primary"
-                disabled={busy || (!body.trim() && !imageId)}
+                disabled={busy || (!body.trim() && !imageId && !videoId)}
                 onClick={() => void submit()}
               >
                 Post

@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 
 // Shared social-graph helpers. Every function module routes pair identity,
 // friendship checks, post enrichment, and notification fan-out through here so
@@ -85,6 +86,56 @@ export async function friendIdsOf(
   ];
 }
 
+export async function occupyPair(
+  ctx: MutationCtx,
+  kind: string,
+  key: string,
+): Promise<void> {
+  const rows = await ctx.db
+    .query("pairLocks")
+    .withIndex("by_kind_key", (q) => q.eq("kind", kind).eq("pairKey", key))
+    .collect();
+  const keep = rows[0];
+  if (keep) {
+    // Patch so a concurrent writer retries on this document (OCC).
+    await ctx.db.patch(keep._id, { createdAt: keep.createdAt });
+    for (const extra of rows.slice(1)) await ctx.db.delete(extra._id);
+    return;
+  }
+  await ctx.db.insert("pairLocks", { kind, pairKey: key, createdAt: Date.now() });
+}
+
+export function isOperator(userId: Id<"users">): boolean {
+  const raw = process.env.OPERATOR_USER_IDS ?? "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(userId);
+}
+
+export async function groupIdsOf(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Id<"groups">[]> {
+  const rows = await ctx.db
+    .query("groupMembers")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  return rows.map((row) => row.groupId);
+}
+
+export async function mutedPairIds(
+  ctx: QueryCtx | MutationCtx,
+  viewerId: Id<"users">,
+): Promise<Set<Id<"users">>> {
+  const rows = await ctx.db
+    .query("mutes")
+    .withIndex("by_muter", (q) => q.eq("muterId", viewerId))
+    .collect();
+  return new Set(rows.map((row) => row.mutedId));
+}
+
 export async function requireActiveUser(
   ctx: QueryCtx | MutationCtx,
 ): Promise<Id<"users">> {
@@ -92,6 +143,12 @@ export async function requireActiveUser(
   if (!userId) throw new Error("Not authenticated");
   const profile = await profileOf(ctx, userId);
   if (profile?.deletedAt) throw new Error("This account is closed");
+  if (process.env.RESEND_API_KEY) {
+    const user = await ctx.db.get(userId);
+    if (user && !user.emailVerificationTime) {
+      throw new Error("Verify your email first");
+    }
+  }
   return userId;
 }
 
@@ -181,9 +238,14 @@ export function postVisibleTo(
   viewerId: Id<"users">,
   viewerFriendIds: Set<Id<"users">>,
   blockedIds?: Set<Id<"users">>,
+  mutedIds?: Set<Id<"users">>,
+  memberGroupIds?: Set<Id<"groups">>,
 ): boolean {
   if (post.authorId === viewerId) return true;
   if (blockedIds?.has(post.authorId)) return false;
+  if (post.groupId && !memberGroupIds?.has(post.groupId)) return false;
+  if (mutedIds?.has(post.authorId)) return false;
+  if (post.groupId) return true;
   if (post.audience === "public") return true;
   return viewerFriendIds.has(post.authorId);
 }
@@ -198,11 +260,22 @@ export async function loadVisiblePost(
 ): Promise<Doc<"posts"> | null> {
   const post = await ctx.db.get(postId);
   if (!post) return null;
-  const [friendIds, blockedIds] = await Promise.all([
+  const [friendIds, blockedIds, groupIds] = await Promise.all([
     friendIdsOf(ctx, viewerId),
     blockedPairIds(ctx, viewerId),
+    groupIdsOf(ctx, viewerId),
   ]);
-  if (!postVisibleTo(post, viewerId, new Set(friendIds), blockedIds)) return null;
+  if (
+    !postVisibleTo(
+      post,
+      viewerId,
+      new Set(friendIds),
+      blockedIds,
+      undefined,
+      new Set(groupIds),
+    )
+  )
+    return null;
   return post;
 }
 
@@ -309,6 +382,8 @@ export interface EnrichedPost {
   createdAt: number;
   editedAt: number | null;
   imageUrl: string | null;
+  videoUrl: string | null;
+  groupId: Id<"groups"> | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -321,7 +396,7 @@ export async function enrichPost(
   post: Doc<"posts">,
   viewerId: Id<"users">,
 ): Promise<EnrichedPost> {
-  const [author, mine, imageUrl] = await Promise.all([
+  const [author, mine, imageUrl, videoUrl] = await Promise.all([
     authorCard(ctx, post.authorId),
     ctx.db
       .query("reactions")
@@ -330,6 +405,7 @@ export async function enrichPost(
       )
       .unique(),
     post.imageId ? ctx.storage.getUrl(post.imageId) : Promise.resolve(null),
+    post.videoId ? ctx.storage.getUrl(post.videoId) : Promise.resolve(null),
   ]);
   const counts = post.reactionCounts as Record<ReactionKind, number>;
   const reactionTotal = REACTION_KINDS.reduce((sum, k) => sum + counts[k], 0);
@@ -341,6 +417,8 @@ export async function enrichPost(
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
     imageUrl,
+    videoUrl,
+    groupId: post.groupId ?? null,
     commentCount: post.commentCount,
     reactionCounts: counts,
     reactionTotal,
@@ -367,6 +445,23 @@ export async function notify(
     postId: args.postId,
     read: false,
     createdAt: Date.now(),
+  });
+  if (!process.env.RESEND_API_KEY) return;
+  const user = await ctx.db.get(args.userId);
+  const email = (user as { email?: string } | null)?.email;
+  if (!email) return;
+  const actor = await authorCard(ctx, args.actorId);
+  const labels: Record<typeof args.kind, string> = {
+    friend_request: "sent you a friend request",
+    friend_accept: "accepted your friend request",
+    reaction: "reacted to your post",
+    comment: "commented on your post",
+  };
+  const origin = (process.env.SITE_URL ?? "").replace(/\/$/, "");
+  await ctx.scheduler.runAfter(0, internal.emails.sendEmail, {
+    to: email,
+    subject: "Openbook",
+    text: `${actor.displayName} ${labels[args.kind]}.${origin ? ` ${origin}` : ""}`,
   });
 }
 

@@ -4,7 +4,7 @@ visibility: public
 reviewed: true
 presentation:
     summary: A fully local realtime social-network proof on a self-hosted Convex stack.
-    detail: Exercise profiles, friendship, audience-scoped feeds, reactions, comments, notifications, direct messages, unread accounting, and indexed people search in one tested product.
+    detail: Exercise profiles, friendship, mute/block, audience-scoped feeds, groups, stories, events, reactions, comments, notifications, direct messages, unread accounting, and indexed people/post search in one tested product.
     language: TypeScript
     lane: Realtime full-stack product engineering
 access:

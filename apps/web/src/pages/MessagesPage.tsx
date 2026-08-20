@@ -17,9 +17,14 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
     { initialNumItems: 30 },
   );
   const conversations = useQuery(api.messages.myConversations);
+  const navigate = useNavigate();
   const send = useMutation(api.messages.send);
   const removeMessage = useMutation(api.messages.remove);
+  const editMessage = useMutation(api.messages.edit);
+  const hideThread = useMutation(api.messages.hide);
   const markRead = useMutation(api.messages.markRead);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -47,9 +52,21 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
   return (
     <div className="ob-msg-thread">
       {meta && (
-        <div className="ob-row" style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
-          <Avatar name={meta.other.displayName} hue={meta.other.avatarHue} size={36} userId={meta.other.userId} />
-          <span className="ob-bold">{meta.other.displayName}</span>
+        <div className="ob-row" style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", justifyContent: "space-between" }}>
+          <span className="ob-row" style={{ gap: 8 }}>
+            <Avatar name={meta.other.displayName} hue={meta.other.avatarHue} size={36} userId={meta.other.userId} />
+            <span className="ob-bold">{meta.other.displayName}</span>
+          </span>
+          <button
+            className="ob-btn ob-btn--sm"
+            onClick={() =>
+              void runOrToast(hideThread({ conversationId }), "Could not hide").then((ok) => {
+                if (ok !== undefined) navigate("/messages");
+              })
+            }
+          >
+            Hide
+          </button>
         </div>
       )}
       <div className="ob-msg-scroll" ref={scrollRef}>
@@ -60,16 +77,44 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
         )}
         {ordered.map((m) => (
           <div key={m._id} className={`ob-msg ${m.isMine ? "mine" : "theirs"}`} title={timeAgo(m.createdAt)}>
-            {m.body}
-            {m.isMine && (
-              <button
-                type="button"
-                className="ob-msg-del"
-                aria-label="Delete message"
-                onClick={() => void runOrToast(removeMessage({ id: m._id }), "Could not delete")}
+            {editingId === m._id ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void runOrToast(editMessage({ id: m._id, body: editBody }), "Could not edit").then((ok) => {
+                    if (ok !== undefined) setEditingId(null);
+                  });
+                }}
               >
-                ×
-              </button>
+                <input className="ob-comment-input" value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+              </form>
+            ) : (
+              m.body
+            )}
+            {m.editedAt ? <span className="ob-muted ob-small"> · edited</span> : null}
+            {m.isMine && m.seenByOther ? <span className="ob-muted ob-small"> · seen</span> : null}
+            {m.isMine && (
+              <>
+                <button
+                  type="button"
+                  className="ob-msg-del"
+                  aria-label="Edit message"
+                  onClick={() => {
+                    setEditingId(m._id);
+                    setEditBody(m.body);
+                  }}
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
+                  className="ob-msg-del"
+                  aria-label="Delete message"
+                  onClick={() => void runOrToast(removeMessage({ id: m._id }), "Could not delete")}
+                >
+                  ×
+                </button>
+              </>
             )}
           </div>
         ))}
