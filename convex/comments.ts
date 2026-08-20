@@ -56,11 +56,26 @@ export const list = query({
           _id: c._id,
           body: c.body,
           createdAt: c.createdAt,
+          editedAt: c.editedAt ?? null,
           author: await authorCard(ctx, c.authorId),
           isMine: c.authorId === viewerId,
         })),
       ),
     };
+  },
+});
+
+export const edit = mutation({
+  args: { id: v.id("comments"), body: v.string() },
+  handler: async (ctx, { id, body }) => {
+    const userId = await requireActiveUser(ctx);
+    const comment = await ctx.db.get(id);
+    if (!comment || comment.authorId !== userId) throw new Error("Comment not found");
+    const trimmed = body.trim();
+    if (!trimmed) throw new Error("Comment cannot be empty");
+    if (trimmed.length > MAX_COMMENT_LENGTH)
+      throw new Error(`Comment too long (max ${MAX_COMMENT_LENGTH})`);
+    await ctx.db.patch(id, { body: trimmed, editedAt: Date.now() });
   },
 });
 

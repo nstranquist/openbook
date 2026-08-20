@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
+import { signedMediaUrl } from "./mediaSign";
 
 // Shared social-graph helpers. Every function module routes pair identity,
 // friendship checks, post enrichment, and notification fan-out through here so
@@ -382,6 +383,7 @@ export interface EnrichedPost {
   createdAt: number;
   editedAt: number | null;
   imageUrl: string | null;
+  imageUrls: string[];
   videoUrl: string | null;
   groupId: Id<"groups"> | null;
   commentCount: number;
@@ -396,7 +398,14 @@ export async function enrichPost(
   post: Doc<"posts">,
   viewerId: Id<"users">,
 ): Promise<EnrichedPost> {
-  const [author, mine, imageUrl, videoUrl] = await Promise.all([
+  const ids = [
+    ...(post.imageIds ?? []),
+    ...(post.imageId && !(post.imageIds ?? []).includes(post.imageId)
+      ? [post.imageId]
+      : []),
+  ];
+  const uniqueIds = [...new Set(ids)];
+  const [author, mine, signed, fallback, videoUrl] = await Promise.all([
     authorCard(ctx, post.authorId),
     ctx.db
       .query("reactions")
@@ -404,9 +413,13 @@ export async function enrichPost(
         q.eq("postId", post._id).eq("userId", viewerId),
       )
       .unique(),
-    post.imageId ? ctx.storage.getUrl(post.imageId) : Promise.resolve(null),
+    Promise.all(uniqueIds.map((id) => signedMediaUrl(id))),
+    Promise.all(uniqueIds.map((id) => ctx.storage.getUrl(id))),
     post.videoId ? ctx.storage.getUrl(post.videoId) : Promise.resolve(null),
   ]);
+  const imageUrls = uniqueIds
+    .map((_, i) => signed[i] ?? fallback[i])
+    .filter((u): u is string => !!u);
   const counts = post.reactionCounts as Record<ReactionKind, number>;
   const reactionTotal = REACTION_KINDS.reduce((sum, k) => sum + counts[k], 0);
   return {
@@ -416,7 +429,8 @@ export async function enrichPost(
     audience: post.audience,
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
-    imageUrl,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
     videoUrl,
     groupId: post.groupId ?? null,
     commentCount: post.commentCount,

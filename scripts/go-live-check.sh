@@ -69,6 +69,7 @@ else
   row "VAPID keys" "⚠ unset — browser notifications stay off"
   warn=1
 fi
+if have MEDIA_SIGNING_SECRET; then row "MEDIA_SIGNING_SECRET" "✓ set"; else row "MEDIA_SIGNING_SECRET" "⚠ unset — /media HMAC falls back to SITE_URL"; warn=1; fi
 
 echo
 if [ "$fail" -ne 0 ]; then

@@ -1,26 +1,22 @@
 # Openbook backlog
 
-KEP-001 shipped the in-repo social completeness slice. Remaining work is
-store binaries and a hosted public userbase (KEP-002, KEP-003).
+KEP-001 social completeness, web-push, native shells, and signed media
+are in-repo. Remaining work is store signing and a hosted public userbase
+executed by a human.
 
 ## Shipped in-repo (2026-08-20)
 
-Email verify when Resend is set. Password change while signed in.
-Stripe cancel + session/refresh wipe on close. Upload occupancy + hourly
-GC. Client EXIF strip. Mute. Profile bio/friends-list privacy. Reports
-with operator review. Comment pagination. Message edit/hide + last-read
-+ message search. Pair occupancy locks. Stories (24h). Groups/pages with
-member-only posts. Events + RSVP. Post full-text search. Video on posts.
-Email notify when Resend is set. Web push send when VAPID keys are set.
-PWA install. `/status` + `/health`. Desktop app-mode script. Backup script.
+See previous slices plus: Tauri desktop shell, Expo mobile shell, HMAC
+`/media` CDN in front of Convex storage, `scripts/deploy.sh`, comment
+edit, multi-image posts.
 
 ## Still out
 
 | Item | Home |
 | --- | --- |
-| Expo / Tauri store binaries | KEP-002 |
-| Hosted production userbase | KEP-003 |
-| Vendor image CDN (Convex storage is the file plane) | later |
+| App Store / Play / signed Tauri bundles | KEP-002 operator |
+| Hosted production userbase | KEP-003 `OPENBOOK_DEPLOY=I_UNDERSTAND` |
+| Link previews / albums / presence | next epic only if we still want more social surface |
 
 ## Non-goals
 

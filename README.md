@@ -38,7 +38,8 @@ signup and post. It is the reviewed evidence declared in
   an operator queue (`OPERATOR_USER_IDS`).
 - **Messages** — friends-only threads, edit/hide, last-read receipts, search.
 - **Search** — people, posts, and messages from the nav / messenger.
-- **Clients** — installable PWA; `scripts/open-desktop.sh` for a desktop window.
+- **Clients** — installable PWA; Tauri desktop (`apps/desktop`); Expo mobile
+  (`apps/mobile`); `scripts/open-desktop.sh` for a Chrome app-mode window.
 - **SaaS spine** — Stripe-mirrored subscriptions; free cap 100 posts, Pro unlimited.
 
 ## Usage

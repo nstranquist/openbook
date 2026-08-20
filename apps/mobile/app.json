@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Openbook",
+    "slug": "openbook",
+    "scheme": "openbook",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.nstranquist.openbook"
+    },
+    "android": {
+      "package": "dev.nstranquist.openbook"
+    }
+  }
+}

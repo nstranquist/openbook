@@ -7,6 +7,8 @@ help:
 	@echo "  make verify               # typecheck + test + build"
 	@echo "  make verify-publication   # full publication gate (incl. gitleaks)"
 	@echo "  make desktop              # Chrome/Edge app-mode window"
+	@echo "  make desktop-tauri        # cargo check the Tauri shell (optional)"
+	@echo "  make mobile               # Expo start (apps/mobile, optional)"
 	@echo "  make export-publication OUT=/path/to/empty-dir"
 
 install:
@@ -31,6 +33,14 @@ publish-ready: verify-publication
 
 desktop:
 	bash scripts/open-desktop.sh
+
+desktop-tauri:
+	@command -v cargo >/dev/null || (echo "cargo not installed; use make desktop" >&2; exit 2)
+	cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+mobile:
+	@test -d apps/mobile/node_modules || (echo "cd apps/mobile && npm install" >&2; exit 2)
+	cd apps/mobile && npx expo start
 
 # Human-gated clean tree for public publish (OUT must be empty absolute path).
 export-publication:

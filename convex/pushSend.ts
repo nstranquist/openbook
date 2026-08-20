@@ -21,7 +21,8 @@ export const sendToUser = internalAction({
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     if (!publicKey || !privateKey) return { sent: 0 };
     const pkg = "web-push";
-    const webpush = (await import(pkg)).default as {
+    const loaded = await import(pkg);
+    const webpush = ((loaded as { default?: unknown }).default ?? loaded) as {
       setVapidDetails: (subject: string, pub: string, priv: string) => void;
       sendNotification: (
         sub: { endpoint: string; keys: { p256dh: string; auth: string } },

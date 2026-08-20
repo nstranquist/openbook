@@ -17,9 +17,9 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<"public" | "friends">("public");
-  const [imageId, setImageId] = useState<Id<"_storage"> | null>(null);
+  const [imageIds, setImageIds] = useState<Id<"_storage">[]>([]);
   const [videoId, setVideoId] = useState<Id<"_storage"> | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,19 +27,19 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
   if (!me) return null;
 
   function resetComposer() {
-    if (preview) URL.revokeObjectURL(preview);
+    for (const url of previews) URL.revokeObjectURL(url);
     if (videoPreview) URL.revokeObjectURL(videoPreview);
     setBody("");
-    setImageId(null);
+    setImageIds([]);
     setVideoId(null);
-    setPreview(null);
+    setPreviews([]);
     setVideoPreview(null);
     setError(null);
     setOpen(false);
   }
 
   async function submit() {
-    if (!body.trim() && !imageId && !videoId) {
+    if (!body.trim() && imageIds.length === 0 && !videoId) {
       setError("Say something first");
       return;
     }
@@ -53,7 +53,7 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
     try {
       await createPost({
         ...parsed.data,
-        imageId: imageId ?? undefined,
+        imageIds: imageIds.length > 0 ? imageIds : undefined,
         videoId: videoId ?? undefined,
         groupId,
       });
@@ -91,9 +91,9 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
               if (e.key === "Escape") resetComposer();
             }}
           />
-          {preview && (
-            <img src={preview} alt="" className="ob-post-image" />
-          )}
+          {previews.map((src) => (
+            <img key={src} src={src} alt="" className="ob-post-image" />
+          ))}
           {videoPreview && (
             <video src={videoPreview} className="ob-post-image" controls />
           )}
@@ -114,34 +114,35 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   hidden
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
+                    const files = [...(e.target.files ?? [])];
                     e.target.value = "";
-                    if (!file) return;
-                    if (!file.type.startsWith("image/")) {
-                      setError("File must be an image");
-                      return;
-                    }
-                    if (file.size > MAX_IMAGE_BYTES) {
-                      setError("Image too large (max 5 MB)");
-                      return;
-                    }
-                    if (preview) URL.revokeObjectURL(preview);
+                    if (files.length === 0) return;
                     if (videoPreview) URL.revokeObjectURL(videoPreview);
                     setVideoId(null);
                     setVideoPreview(null);
-                    setPreview(URL.createObjectURL(file));
                     void (async () => {
-                      try {
-                        const blob = await stripImageMetadata(file);
-                        const prepared = new File([blob], file.name, { type: blob.type || file.type });
-                        const storageId = await uploadStorageFile(prepared, generateUploadUrl);
-                        await registerImage({ storageId });
-                        setImageId(storageId);
-                      } catch (err) {
-                        setPreview(null);
-                        setError(err instanceof Error ? err.message : "Upload failed");
+                      for (const file of files) {
+                        if (!file.type.startsWith("image/")) {
+                          setError("File must be an image");
+                          return;
+                        }
+                        if (file.size > MAX_IMAGE_BYTES) {
+                          setError("Image too large (max 5 MB)");
+                          return;
+                        }
+                        try {
+                          const blob = await stripImageMetadata(file);
+                          const prepared = new File([blob], file.name, { type: blob.type || file.type });
+                          const storageId = await uploadStorageFile(prepared, generateUploadUrl);
+                          await registerImage({ storageId });
+                          setImageIds((ids) => [...ids, storageId].slice(0, 4));
+                          setPreviews((urls) => [...urls, URL.createObjectURL(file)].slice(0, 4));
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Upload failed");
+                        }
                       }
                     })();
                   }}
@@ -165,10 +166,10 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                       setError("Video too large (max 32 MB)");
                       return;
                     }
-                    if (preview) URL.revokeObjectURL(preview);
+                    for (const url of previews) URL.revokeObjectURL(url);
                     if (videoPreview) URL.revokeObjectURL(videoPreview);
-                    setImageId(null);
-                    setPreview(null);
+                    setImageIds([]);
+                    setPreviews([]);
                     setVideoPreview(URL.createObjectURL(file));
                     void (async () => {
                       try {
@@ -188,7 +189,7 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
               </button>
               <button
                 className="ob-btn ob-btn--primary"
-                disabled={busy || (!body.trim() && !imageId && !videoId)}
+                disabled={busy || (!body.trim() && imageIds.length === 0 && !videoId)}
                 onClick={() => void submit()}
               >
                 Post

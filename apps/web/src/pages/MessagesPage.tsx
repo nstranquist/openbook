@@ -146,19 +146,7 @@ function ChatSearch() {
     const handle = setTimeout(() => setDebounced(q.trim()), 200);
     return () => clearTimeout(handle);
   }, [q]);
-  const hits = useQuery(api.messages.search, debounced ? { q: debounced } : "skip");
-  if (!hits || hits.length === 0) {
-    return (
-      <input
-        className="g-input"
-        placeholder="Search messages"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search messages"
-        style={{ margin: "8px 12px", width: "calc(100% - 24px)" }}
-      />
-    );
-  }
+  const hits = useQuery(api.messages.search, debounced ? { q: debounced } : "skip") ?? [];
   return (
     <div>
       <input

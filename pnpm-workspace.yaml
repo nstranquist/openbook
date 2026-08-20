@@ -2,5 +2,5 @@
 # Every client app and the shared package are workspace members so they all
 # resolve the same @openbook/shared source and the same generated API.
 packages:
-  - "apps/*"
+  - "apps/web"
   - "packages/*"

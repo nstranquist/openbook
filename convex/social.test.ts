@@ -724,6 +724,21 @@ describe("privacy, reports, stories, events, search", () => {
   });
 });
 
+describe("comment edit", () => {
+  it("author can edit a comment", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "with comments", audience: "public",
+    });
+    const id = await alice.as.mutation(api.comments.add, { postId, body: "draft" });
+    await alice.as.mutation(api.comments.edit, { id, body: "edited comment" });
+    const page = await alice.as.query(api.comments.list, { postId, paginationOpts: firstPage });
+    expect(page.page[0].body).toBe("edited comment");
+    expect(page.page[0].editedAt).toBeTruthy();
+  });
+});
+
 describe("message search and push config", () => {
   it("message search is scoped to the viewer's threads", async () => {
     const t = convexTest(schema, modules);

@@ -1,6 +1,6 @@
 # KEP-002 — Native clients
 
-- Status: accepted, web PWA shipped; store binaries not started
+- Status: accepted, PWA + Tauri shell + Expo shell shipped; store signing not started
 - Date: 2026-08-20
 
 ## Decision
@@ -10,9 +10,11 @@ manifest, service worker, standalone display. iOS/Android home-screen
 install uses that PWA. A local desktop window is
 `scripts/open-desktop.sh` (Chrome/Edge app mode).
 
-Expo and Tauri remain a later extract. They must consume
-`@openbook/shared` + the Convex API and must not reintroduce
-`dev:mobile` / `dev:desktop` scripts that point at missing packages.
+`apps/desktop` is a Tauri 2 window over `apps/web`.
+`apps/mobile` is an Expo WebView over the same origin.
+Both consume the Convex API through the web client. They must not
+reintroduce `dev:mobile` / `dev:desktop` scripts that point at missing
+packages. Store signing remains operator-gated.
 
 ## Why not Expo/Tauri in this slice
 

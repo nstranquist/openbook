@@ -12,3 +12,11 @@ build/
 # Convex deployment state is local. The generated API is committed so a clean
 # checkout can typecheck and test without provisioning a deployment first.
 .convex/
+
+# Perfect World runtime (local dogfood). Do not publish sqlite/cache.
+.pw/
+
+# Native client build output (Rust/Expo). Source stays in git.
+apps/desktop/src-tauri/target/
+apps/mobile/node_modules/
+apps/mobile/.expo/

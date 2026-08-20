@@ -25,6 +25,7 @@ interface EnrichedPost {
   createdAt: number;
   editedAt?: number | null;
   imageUrl?: string | null;
+  imageUrls?: string[];
   videoUrl?: string | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
@@ -104,7 +105,10 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
   const me = useQuery(api.profiles.me);
   const addComment = useMutation(api.comments.add);
   const removeComment = useMutation(api.comments.remove);
+  const editComment = useMutation(api.comments.edit);
   const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -124,12 +128,37 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
               <Link to={`/profile/${c.author.userId}`} className="ob-link ob-bold ob-small">
                 {c.author.displayName}
               </Link>
-              <div>{c.body}</div>
+              {editingId === c._id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void runOrToast(editComment({ id: c._id, body: editBody }), "Could not edit").then((ok) => {
+                      if (ok !== undefined) setEditingId(null);
+                    });
+                  }}
+                >
+                  <input className="ob-comment-input" value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+                </form>
+              ) : (
+                <div>{c.body}</div>
+              )}
             </div>
             <span className="ob-muted" style={{ fontSize: 12, marginLeft: 12 }}>
               {timeAgo(c.createdAt)}
+              {c.editedAt ? " · edited" : ""}
               {c.isMine && (
                 <>
+                  {" · "}
+                  <button
+                    className="ob-btn--danger-ghost"
+                    style={{ border: 0, background: "none", cursor: "pointer", fontSize: 12, padding: 0 }}
+                    onClick={() => {
+                      setEditingId(c._id);
+                      setEditBody(c.body);
+                    }}
+                  >
+                    Edit
+                  </button>
                   {" · "}
                   <button
                     className="ob-btn--danger-ghost"
@@ -289,9 +318,14 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
       ) : (
         <>
           {post.body ? <p className="ob-post-body">{post.body}</p> : null}
-          {post.imageUrl ? (
-            <img src={post.imageUrl} alt="" className="ob-post-image" />
-          ) : null}
+          {(post.imageUrls && post.imageUrls.length > 0
+            ? post.imageUrls
+            : post.imageUrl
+              ? [post.imageUrl]
+              : []
+          ).map((src) => (
+            <img key={src} src={src} alt="" className="ob-post-image" />
+          ))}
           {post.videoUrl ? (
             <video src={post.videoUrl} className="ob-post-image" controls />
           ) : null}

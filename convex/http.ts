@@ -100,6 +100,33 @@ http.route({
 });
 
 http.route({
+  path: "/media",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id") ?? "";
+    const exp = Number(url.searchParams.get("exp") ?? "0");
+    const sig = url.searchParams.get("sig") ?? "";
+    const { verifyMedia } = await import("./lib/mediaSign");
+    if (!(await verifyMedia(id, exp, sig))) {
+      return new Response("Not found", { status: 404 });
+    }
+    try {
+      const blob = await ctx.storage.get(id as never);
+      if (!blob) return new Response("Not found", { status: 404 });
+      return new Response(blob, {
+        headers: {
+          "Content-Type": blob.type || "application/octet-stream",
+          "Cache-Control": "public, max-age=86400, immutable",
+        },
+      });
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  }),
+});
+
+http.route({
   path: "/health",
   method: "GET",
   handler: httpAction(async () => {

@@ -126,19 +126,22 @@ export const create = mutation({
     body: v.string(),
     audience: audienceValidator,
     imageId: v.optional(v.id("_storage")),
+    imageIds: v.optional(v.array(v.id("_storage"))),
     videoId: v.optional(v.id("_storage")),
     groupId: v.optional(v.id("groups")),
   },
-  handler: async (ctx, { body, audience, imageId, videoId, groupId }) => {
+  handler: async (ctx, { body, audience, imageId, imageIds, videoId, groupId }) => {
     const authorId = await requireActiveUser(ctx);
+    const photos = [...new Set([...(imageIds ?? []), ...(imageId ? [imageId] : [])])];
+    if (photos.length > 4) throw new Error("At most 4 photos");
     const trimmed = body.trim();
-    if (!trimmed && !imageId && !videoId) throw new Error("Post cannot be empty");
+    if (!trimmed && photos.length === 0 && !videoId) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
-    if (imageId && videoId) throw new Error("Attach a photo or a video, not both");
-    if (imageId) {
-      await assertImage(ctx, imageId);
-      await claimUpload(ctx, authorId, imageId);
+    if (photos.length > 0 && videoId) throw new Error("Attach photos or a video, not both");
+    for (const id of photos) {
+      await assertImage(ctx, id);
+      await claimUpload(ctx, authorId, id);
     }
     if (videoId) {
       await assertVideo(ctx, videoId);
@@ -167,7 +170,8 @@ export const create = mutation({
       body: trimmed,
       audience,
       createdAt: Date.now(),
-      imageId,
+      imageId: photos[0],
+      imageIds: photos.length > 0 ? photos : undefined,
       videoId,
       groupId,
       commentCount: 0,

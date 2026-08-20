@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Openbook desktop window",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

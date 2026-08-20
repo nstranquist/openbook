@@ -62,7 +62,10 @@ export const feed = query({
       visible.slice(0, 24).map(async (s) => ({
         ...s,
         author: await authorCard(ctx, s.authorId),
-        imageUrl: s.imageId ? await ctx.storage.getUrl(s.imageId) : null,
+        imageUrl: s.imageId
+          ? (await (await import("./lib/mediaSign")).signedMediaUrl(s.imageId)) ??
+            (await ctx.storage.getUrl(s.imageId))
+          : null,
       })),
     );
   },

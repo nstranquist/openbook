@@ -72,6 +72,7 @@ export default defineSchema({
     createdAt: v.number(),
     editedAt: v.optional(v.number()),
     imageId: v.optional(v.id("_storage")),
+    imageIds: v.optional(v.array(v.id("_storage"))),
     videoId: v.optional(v.id("_storage")),
     groupId: v.optional(v.id("groups")),
     commentCount: v.number(),
@@ -87,6 +88,7 @@ export default defineSchema({
     authorId: v.id("users"),
     body: v.string(),
     createdAt: v.number(),
+    editedAt: v.optional(v.number()),
   })
     .index("by_post", ["postId"])
     .index("by_author", ["authorId"]),

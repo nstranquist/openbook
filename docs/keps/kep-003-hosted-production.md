@@ -13,8 +13,8 @@ No synthetic fixtures in the production deployment. No real user data
 in git.
 
 The in-repo slice that *is* shipped: public `/status` (no SLA), HTTP
-`/health`, and `scripts/export-backup.sh` for a Convex export or
-self-hosted volume copy.
+`/health`, signed `/media` cache, `scripts/export-backup.sh`, and
+`scripts/deploy.sh` (refuses unless `OPENBOOK_DEPLOY=I_UNDERSTAND`).
 
 ## Acceptance (in-repo — current)
 
