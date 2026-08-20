@@ -24,6 +24,7 @@ interface EnrichedPost {
   audience: "public" | "friends";
   createdAt: number;
   editedAt?: number | null;
+  imageUrl?: string | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -259,7 +260,12 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           </div>
         </div>
       ) : (
-        <p className="ob-post-body">{post.body}</p>
+        <>
+          {post.body ? <p className="ob-post-body">{post.body}</p> : null}
+          {post.imageUrl ? (
+            <img src={post.imageUrl} alt="" className="ob-post-image" />
+          ) : null}
+        </>
       )}
       <ReactionSummary
         post={post}

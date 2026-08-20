@@ -18,6 +18,7 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
   );
   const conversations = useQuery(api.messages.myConversations);
   const send = useMutation(api.messages.send);
+  const removeMessage = useMutation(api.messages.remove);
   const markRead = useMutation(api.messages.markRead);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,6 +61,16 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
         {ordered.map((m) => (
           <div key={m._id} className={`ob-msg ${m.isMine ? "mine" : "theirs"}`} title={timeAgo(m.createdAt)}>
             {m.body}
+            {m.isMine && (
+              <button
+                type="button"
+                className="ob-msg-del"
+                aria-label="Delete message"
+                onClick={() => void runOrToast(removeMessage({ id: m._id }), "Could not delete")}
+              >
+                ×
+              </button>
+            )}
           </div>
         ))}
         {ordered.length === 0 && status !== "LoadingFirstPage" && (

@@ -8,15 +8,16 @@ import { clearSavedLogin, loadSavedLogin, saveLogin } from "../lib/savedLogin";
 // display name; it's handed to profiles.ensure right after the first
 // authenticated render (see App.tsx EnsureProfile).
 export function SignIn() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWith, requestPasswordReset, confirmPasswordReset } = useAuth();
   const saved = useRef(loadSavedLogin()).current;
   const [name, setName] = useState("");
   const [email, setEmail] = useState(saved?.email ?? "");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [remember, setRemember] = useState(saved !== null);
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
+  const [flow, setFlow] = useState<"signIn" | "signUp" | "reset" | "resetVerify">("signIn");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"form" | "dev" | false>(false);
+  const [busy, setBusy] = useState<"form" | "dev" | "oauth" | false>(false);
   const autoLogin = useDevAutoLogin();
   const dev = devIdentity();
 
@@ -32,6 +33,14 @@ export function SignIn() {
         }
         sessionStorage.setItem("openbook.signupName", name.trim());
         await signUp(email, password);
+      } else if (flow === "reset") {
+        await requestPasswordReset(email);
+        setFlow("resetVerify");
+        setError(null);
+        setBusy(false);
+        return;
+      } else if (flow === "resetVerify") {
+        await confirmPasswordReset(email, code, password);
       } else {
         await signIn(email, password);
       }
@@ -106,7 +115,15 @@ export function SignIn() {
         className="ob-card ob-auth-card"
         aria-label={flow === "signIn" ? "Log in" : "Sign up"}
       >
-        <h2 className="ob-auth-title">{flow === "signIn" ? "Log in to Openbook" : "Create your account"}</h2>
+        <h2 className="ob-auth-title">
+          {flow === "signIn"
+            ? "Log in to Openbook"
+            : flow === "signUp"
+              ? "Create your account"
+              : flow === "reset"
+                ? "Reset password"
+                : "Enter reset code"}
+        </h2>
         {flow === "signUp" && (
           <input
             className="g-input"
@@ -129,18 +146,41 @@ export function SignIn() {
           disabled={busy !== false}
           required
         />
-        <input
-          className="g-input"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          type="password"
-          aria-label="Password"
-          autoComplete={flow === "signIn" ? "current-password" : "new-password"}
-          disabled={busy !== false}
-          required
-          minLength={8}
-        />
+        {flow === "resetVerify" && (
+          <input
+            className="g-input"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Reset code"
+            aria-label="Reset code"
+            disabled={busy !== false}
+            required
+          />
+        )}
+        {flow !== "reset" && (
+          <input
+            className="g-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={flow === "resetVerify" ? "New password" : "Password"}
+            type="password"
+            aria-label={flow === "resetVerify" ? "New password" : "Password"}
+            autoComplete={flow === "signIn" ? "current-password" : "new-password"}
+            disabled={busy !== false}
+            required
+            minLength={8}
+          />
+        )}
+        {flow === "signIn" && (
+          <button
+            type="button"
+            className="ob-link ob-small"
+            style={{ alignSelf: "flex-start", background: "none", border: 0, padding: 0, cursor: "pointer" }}
+            onClick={() => { setFlow("reset"); setError(null); }}
+          >
+            Forgot password?
+          </button>
+        )}
         <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy !== false} />
           <span>Remember my email on this device</span>
@@ -150,8 +190,50 @@ export function SignIn() {
           className="ob-btn ob-btn--primary ob-auth-submit"
           disabled={busy !== false}
         >
-          {busy === "form" ? "Working…" : flow === "signIn" ? "Log in" : "Sign up"}
+          {busy === "form"
+            ? "Working…"
+            : flow === "signIn"
+              ? "Log in"
+              : flow === "signUp"
+                ? "Sign up"
+                : flow === "reset"
+                  ? "Send reset code"
+                  : "Set new password"}
         </button>
+        {flow === "signIn" && (
+          <div className="ob-row" style={{ gap: 8 }}>
+            <button
+              type="button"
+              className="ob-btn"
+              style={{ flex: 1 }}
+              disabled={busy !== false}
+              onClick={() => {
+                setBusy("oauth");
+                void signInWith("github").catch((err) => {
+                  setBusy(false);
+                  setError(err instanceof Error ? err.message : "GitHub sign-in failed");
+                });
+              }}
+            >
+              GitHub
+            </button>
+            <button
+              type="button"
+              className="ob-btn"
+              style={{ flex: 1 }}
+              disabled={busy !== false}
+              onClick={() => {
+                setBusy("oauth");
+                void signInWith("google").catch((err) => {
+                  setBusy(false);
+                  setError(err instanceof Error ? err.message : "Google sign-in failed");
+                });
+              }}
+            >
+              Google
+            </button>
+          </div>
+        )}
         {isDevLoginAvailable() && (
           <button
             type="button"
@@ -173,7 +255,7 @@ export function SignIn() {
           className="ob-btn ob-auth-switch"
           disabled={busy !== false}
           onClick={() => {
-            setFlow(flow === "signIn" ? "signUp" : "signIn");
+            setFlow(flow === "signUp" || flow === "reset" || flow === "resetVerify" ? "signIn" : "signUp");
             setError(null);
           }}
         >

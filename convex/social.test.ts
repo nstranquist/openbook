@@ -488,6 +488,27 @@ describe("messages", () => {
     ).rejects.toThrow(/yourself/i);
   });
 
+  it("sender can delete their message and preview rewinds", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const conv = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    await alice.as.mutation(api.messages.send, { conversationId: conv, body: "first" });
+    await alice.as.mutation(api.messages.send, { conversationId: conv, body: "second" });
+    const thread = await alice.as.query(api.messages.list, {
+      conversationId: conv, paginationOpts: firstPage,
+    });
+    const second = thread.page.find((m: any) => m.body === "second");
+    await alice.as.mutation(api.messages.remove, { id: second._id });
+    const after = await alice.as.query(api.messages.list, {
+      conversationId: conv, paginationOpts: firstPage,
+    });
+    expect(after.page.map((m: any) => m.body)).toEqual(["first"]);
+    const convs = await alice.as.query(api.messages.myConversations, {});
+    expect(convs[0].lastMessageBody).toBe("first");
+  });
+
   it("strangers cannot open a new conversation", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");

@@ -66,16 +66,45 @@ async function paginateVisiblePosts(
 }
 
 export const MAX_POST_LENGTH = 5000;
+const MAX_IMAGE_BYTES = 5_000_000;
+
+async function assertImage(
+  ctx: { db: { system: { get: (id: Id<"_storage">) => Promise<{ contentType?: string; size?: number } | null> } } },
+  imageId: Id<"_storage">,
+) {
+  const meta = await ctx.db.system.get(imageId);
+  if (!meta) throw new Error("Image not found");
+  if (meta.contentType && !meta.contentType.startsWith("image/")) {
+    throw new Error("File must be an image");
+  }
+  if (typeof meta.size === "number" && meta.size > MAX_IMAGE_BYTES) {
+    throw new Error("Image too large (max 5 MB)");
+  }
+}
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
 
 export const create = mutation({
-  args: { body: v.string(), audience: audienceValidator },
-  handler: async (ctx, { body, audience }) => {
+  args: {
+    body: v.string(),
+    audience: audienceValidator,
+    imageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, { body, audience, imageId }) => {
     const authorId = await getAuthUserId(ctx);
     if (!authorId) throw new Error("Not authenticated");
     const trimmed = body.trim();
-    if (!trimmed) throw new Error("Post cannot be empty");
+    if (!trimmed && !imageId) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
+    if (imageId) await assertImage(ctx, imageId);
     await takeRate(ctx, authorId, "post");
     // Plan gate (SaaS spine): the free tier caps lifetime posts; Pro is
     // unlimited. Reads the effective plan so a lapsed sub downgrades correctly.
@@ -90,6 +119,7 @@ export const create = mutation({
       body: trimmed,
       audience,
       createdAt: Date.now(),
+      imageId,
       commentCount: 0,
       reactionCounts: emptyReactionCounts(),
     });
@@ -124,7 +154,11 @@ export const update = mutation({
     if (!trimmed) throw new Error("Post cannot be empty");
     if (trimmed.length > MAX_POST_LENGTH)
       throw new Error(`Post too long (max ${MAX_POST_LENGTH})`);
-    const patch: { body: string; editedAt: number; audience?: "public" | "friends" } = {
+    const patch: {
+      body: string;
+      editedAt: number;
+      audience?: "public" | "friends";
+    } = {
       body: trimmed,
       editedAt: Date.now(),
     };
@@ -170,6 +204,7 @@ export const remove = mutation({
     if (!post) return;
     if (post.authorId !== userId)
       throw new Error("Only the author can delete a post");
+    if (post.imageId) await ctx.storage.delete(post.imageId);
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", id))

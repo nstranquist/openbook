@@ -129,6 +129,30 @@ export const send = mutation({
   },
 });
 
+export const remove = mutation({
+  args: { id: v.id("messages") },
+  handler: async (ctx, { id }) => {
+    const me = await getAuthUserId(ctx);
+    if (!me) throw new Error("Not authenticated");
+    const message = await ctx.db.get(id);
+    if (!message || message.senderId !== me) throw new Error("Message not found");
+    const conversationId = message.conversationId;
+    await ctx.db.delete(id);
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) return;
+    const latest = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .order("desc")
+      .first();
+    await ctx.db.patch(conversationId, {
+      lastMessageAt: latest?.createdAt ?? conversation.lastMessageAt,
+      lastMessageBody: latest?.body ?? "",
+      lastSenderId: latest?.senderId,
+    });
+  },
+});
+
 // The Messenger sidebar: my conversations, most recent first, with the other
 // participant's card and my unread tally.
 export const myConversations = query({

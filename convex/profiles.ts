@@ -175,6 +175,7 @@ export const deleteAccount = mutation({
       for (const n of notifs) {
         if (n.postId === post._id) await ctx.db.delete(n._id);
       }
+      if (post.imageId) await ctx.storage.delete(post.imageId);
       await ctx.db.delete(post._id);
     }
 

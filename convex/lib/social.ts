@@ -297,6 +297,7 @@ export interface EnrichedPost {
   audience: "public" | "friends";
   createdAt: number;
   editedAt: number | null;
+  imageUrl: string | null;
   commentCount: number;
   reactionCounts: Record<ReactionKind, number>;
   reactionTotal: number;
@@ -309,7 +310,7 @@ export async function enrichPost(
   post: Doc<"posts">,
   viewerId: Id<"users">,
 ): Promise<EnrichedPost> {
-  const [author, mine] = await Promise.all([
+  const [author, mine, imageUrl] = await Promise.all([
     authorCard(ctx, post.authorId),
     ctx.db
       .query("reactions")
@@ -317,6 +318,7 @@ export async function enrichPost(
         q.eq("postId", post._id).eq("userId", viewerId),
       )
       .unique(),
+    post.imageId ? ctx.storage.getUrl(post.imageId) : Promise.resolve(null),
   ]);
   const counts = post.reactionCounts as Record<ReactionKind, number>;
   const reactionTotal = REACTION_KINDS.reduce((sum, k) => sum + counts[k], 0);
@@ -327,6 +329,7 @@ export async function enrichPost(
     audience: post.audience,
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
+    imageUrl,
     commentCount: post.commentCount,
     reactionCounts: counts,
     reactionTotal,

@@ -4,7 +4,7 @@ import { z } from "zod";
 // The server enforces the same bounds; these exist for instant client feedback.
 
 export const postInput = z.object({
-  body: z.string().trim().min(1, "Say something first").max(5000),
+  body: z.string().trim().max(5000),
   audience: z.enum(["public", "friends"]),
 });
 export type PostInput = z.infer<typeof postInput>;

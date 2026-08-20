@@ -18,15 +18,16 @@ signup and post. It is the reviewed evidence declared in
 
 ## Features
 
-- **Identity** — Convex Auth (email+password), auto-provisioned profile with
-  deterministic-hue avatar/cover (zero file storage), editable bio/work/location.
-  Settings can close the account (wipes posts and the friend graph).
+- **Identity** — Convex Auth (email+password, optional GitHub/Google, password
+  reset when `RESEND_API_KEY` is set). Auto-provisioned profile with
+  deterministic-hue avatar/cover. Settings can close the account.
 - **Friend graph** — request → accept lifecycle (decline / cancel / unfriend),
   cross-request auto-accept, *People You May Know* ranked by mutual friends,
   and block/unblock (hides posts and blocks new requests in both directions).
 - **Feed** — paginated, newest-first, server-side visibility: `friends`-audience
   posts reach only the author's friends; `public` posts reach everyone. Authors
-  can edit a post (body + audience). Write paths are rate-limited.
+  can edit a post and attach an image (Convex storage; URL is issued only after
+  visibility). Write paths are rate-limited.
 - **Reactions** — the classic six (👍❤️😆😮😢😡), one per user per post,
   hover picker, denormalized tallies kept exact in the same transaction.
 - **Comments** — inline threads with exact counts and owner/author delete rights.
@@ -34,7 +35,7 @@ signup and post. It is the reviewed evidence declared in
 - **Notifications** — bell with unread badge for friend requests, accepts,
   reactions, and comments; mark-read / mark-all-read.
 - **Messages** — friends-only threads, realtime delivery, unread accounting,
-  conversation previews. Existing threads stay readable after unfriend.
+  conversation previews, sender-delete. Existing threads stay readable after unfriend.
 - **People search** — full-text search index over display names, live from the nav bar.
 - **SaaS spine** (from the scaffold) — Stripe-mirrored subscriptions; the free
   tier caps lifetime posts at 100, Pro lifts it (`convex/lib/plans.ts`).

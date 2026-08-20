@@ -69,6 +69,7 @@ export default defineSchema({
     audience: audienceValidator,
     createdAt: v.number(),
     editedAt: v.optional(v.number()),
+    imageId: v.optional(v.id("_storage")),
     commentCount: v.number(),
     reactionCounts: reactionCountsValidator,
   })

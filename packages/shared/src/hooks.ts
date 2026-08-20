@@ -13,6 +13,9 @@ export function useSession(): { isAuthenticated: boolean; isLoading: boolean } {
 export function useAuth(): {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  signInWith: (provider: "github" | "google") => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
 } {
   const { signIn, signOut } = useAuthActions();
@@ -22,6 +25,20 @@ export function useAuth(): {
     },
     signUp: async (email, password) => {
       await signIn("password", { email, password, flow: "signUp" });
+    },
+    signInWith: async (provider) => {
+      await signIn(provider);
+    },
+    requestPasswordReset: async (email) => {
+      await signIn("password", { email, flow: "reset" });
+    },
+    confirmPasswordReset: async (email, code, newPassword) => {
+      await signIn("password", {
+        email,
+        code,
+        newPassword,
+        flow: "reset-verification",
+      });
     },
     signOut: async () => {
       await signOut();
