@@ -28,7 +28,8 @@ full-stack review, not a Meta clone.
 Server-enforced visibility, pair occupancy, mute vs block, reports with
 an operator queue, paginated comments, searchable posts and messages,
 owned uploads with EXIF strip on the client, hourly GC, password change
-while signed in, PWA install, a public status page, and a backup script.
+while signed in, PWA install, web push when VAPID keys are set, a public
+status page, and a backup script.
 
 ## Out of scope
 

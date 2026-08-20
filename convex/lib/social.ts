@@ -446,10 +446,6 @@ export async function notify(
     read: false,
     createdAt: Date.now(),
   });
-  if (!process.env.RESEND_API_KEY) return;
-  const user = await ctx.db.get(args.userId);
-  const email = (user as { email?: string } | null)?.email;
-  if (!email) return;
   const actor = await authorCard(ctx, args.actorId);
   const labels: Record<typeof args.kind, string> = {
     friend_request: "sent you a friend request",
@@ -457,12 +453,33 @@ export async function notify(
     reaction: "reacted to your post",
     comment: "commented on your post",
   };
+  const text = `${actor.displayName} ${labels[args.kind]}.`;
   const origin = (process.env.SITE_URL ?? "").replace(/\/$/, "");
-  await ctx.scheduler.runAfter(0, internal.emails.sendEmail, {
-    to: email,
-    subject: "Openbook",
-    text: `${actor.displayName} ${labels[args.kind]}.${origin ? ` ${origin}` : ""}`,
-  });
+  const path =
+    args.kind === "friend_request" || args.kind === "friend_accept"
+      ? "/friends"
+      : args.postId
+        ? `/post/${args.postId}`
+        : "/";
+  if (process.env.RESEND_API_KEY) {
+    const user = await ctx.db.get(args.userId);
+    const email = (user as { email?: string } | null)?.email;
+    if (email) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendEmail, {
+        to: email,
+        subject: "Openbook",
+        text: `${text}${origin ? ` ${origin}${path}` : ""}`,
+      });
+    }
+  }
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    await ctx.scheduler.runAfter(0, internal.pushSend.sendToUser, {
+      userId: args.userId,
+      title: "Openbook",
+      body: text,
+      url: path,
+    });
+  }
 }
 
 // Deterministic display hue from a user id — stable avatars with no uploads.

@@ -11,8 +11,8 @@ GC. Client EXIF strip. Mute. Profile bio/friends-list privacy. Reports
 with operator review. Comment pagination. Message edit/hide + last-read
 + message search. Pair occupancy locks. Stories (24h). Groups/pages with
 member-only posts. Events + RSVP. Post full-text search. Video on posts.
-Email notify when Resend is set. PWA install. `/status` + `/health`.
-Desktop app-mode script. Backup script.
+Email notify when Resend is set. Web push send when VAPID keys are set.
+PWA install. `/status` + `/health`. Desktop app-mode script. Backup script.
 
 ## Still out
 
@@ -20,8 +20,7 @@ Desktop app-mode script. Backup script.
 | --- | --- |
 | Expo / Tauri store binaries | KEP-002 |
 | Hosted production userbase | KEP-003 |
-| Dedicated image CDN | later |
-| Web-push send (subscriptions are stored) | polish |
+| Vendor image CDN (Convex storage is the file plane) | later |
 
 ## Non-goals
 

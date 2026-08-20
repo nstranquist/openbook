@@ -5,6 +5,55 @@ import { ThemeToggle, toast } from "../ui/garrid";
 import { Avatar } from "../components/Avatar";
 import { BillingPanel } from "../components/BillingPanel";
 import { runOrToast } from "../lib/run";
+import { subscribePush, unsubscribePush } from "../lib/push";
+
+function PushCard() {
+  const vapid = useQuery(api.push.vapidPublicKey);
+  const mine = useQuery(api.push.mine);
+  const subscribe = useMutation(api.push.subscribe);
+  const unsubscribe = useMutation(api.push.unsubscribe);
+  const [busy, setBusy] = useState(false);
+  if (vapid === undefined) return null;
+  if (!vapid) {
+    return (
+      <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+        <div className="g-card-title">Browser notifications</div>
+        <div className="g-hint">
+          Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the deployment to enable push.
+        </div>
+      </div>
+    );
+  }
+  const on = (mine ?? []).length > 0;
+  return (
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-spread">
+        <div>
+          <div className="g-card-title">Browser notifications</div>
+          <div className="g-hint">
+            {on ? "This device is subscribed." : "Get a push when someone messages or mentions you."}
+          </div>
+        </div>
+        <button
+          className="g-btn g-btn--sm"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            const work = on
+              ? unsubscribePush(unsubscribe)
+              : subscribePush(vapid, subscribe);
+            void work
+              .then(() => toast(on ? "Notifications off" : "Notifications on", "ok"))
+              .catch((e) => toast(e instanceof Error ? e.message : "Could not update push", "err"))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? "Working…" : on ? "Disable" : "Enable"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function PasswordChange() {
   const me = useQuery(api.profiles.me);
@@ -228,6 +277,8 @@ export function SettingsPage() {
       </div>
 
       <PasswordChange />
+
+      <PushCard />
 
       <BillingPanel />
 

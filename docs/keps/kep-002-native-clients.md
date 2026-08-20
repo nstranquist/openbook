@@ -26,6 +26,8 @@ schema.
 - `manifest.webmanifest` + `sw.js` are served from `apps/web/public`.
 - `index.html` declares standalone display and theme color.
 - `scripts/open-desktop.sh` opens the running web app in app mode.
+- Service worker handles `push` / `notificationclick`. Settings can
+  subscribe when `VAPID_PUBLIC_KEY` is set.
 
 ## Acceptance (store — future)
 

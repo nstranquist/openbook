@@ -63,6 +63,12 @@ if have RESEND_API_KEY; then row "RESEND_API_KEY" "✓ set (reset/verify + notif
 if have EMAIL_FROM; then row "EMAIL_FROM" "✓ $EMAIL_FROM"; else row "EMAIL_FROM" "⚠ default Openbook <onboarding@resend.dev>"; warn=1; fi
 if have OPERATOR_USER_IDS; then row "OPERATOR_USER_IDS" "✓ set"; else row "OPERATOR_USER_IDS" "⚠ unset — report queue is empty for everyone"; warn=1; fi
 if have SITE_URL; then row "SITE_URL" "✓ $SITE_URL"; else row "SITE_URL" "⚠ unset — checkout returns and email links need it"; warn=1; fi
+if { have VAPID_PUBLIC_KEY && have VAPID_PRIVATE_KEY; }; then
+  row "VAPID keys" "✓ set (web push)"
+else
+  row "VAPID keys" "⚠ unset — browser notifications stay off"
+  warn=1
+fi
 
 echo
 if [ "$fail" -ne 0 ]; then

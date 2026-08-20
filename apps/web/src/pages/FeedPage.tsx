@@ -1,4 +1,4 @@
-import { api } from "@openbook/shared";
+import { api, type Id } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
 import { runOrToast } from "../lib/run";
+import { MAX_IMAGE_BYTES, stripImageMetadata, uploadStorageFile } from "../lib/media";
 
 // Home: the classic three-column layout. Left rail = identity + shortcuts,
 // center = composer + the paginated reactive feed, right rail = contacts
@@ -117,8 +118,12 @@ function FeedSkeleton() {
 function StoriesStrip() {
   const stories = useQuery(api.stories.feed) ?? [];
   const create = useMutation(api.stories.create);
+  const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
+  const registerImage = useMutation(api.posts.registerImage);
   const [draft, setDraft] = useState("");
   const [audience, setAudience] = useState<"public" | "friends">("friends");
+  const [imageId, setImageId] = useState<Id<"_storage"> | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   return (
     <div className="ob-stack" style={{ gap: 8 }}>
       <div className="ob-card ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -133,24 +138,57 @@ function StoriesStrip() {
           <option value="friends">Friends</option>
           <option value="public">Public</option>
         </select>
+        <label className="ob-btn ob-btn--sm" style={{ cursor: "pointer" }}>
+          Photo
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) return;
+              if (preview) URL.revokeObjectURL(preview);
+              setPreview(URL.createObjectURL(file));
+              void (async () => {
+                const blob = await stripImageMetadata(file);
+                const prepared = new File([blob], file.name, { type: blob.type || file.type });
+                const storageId = await uploadStorageFile(prepared, generateUploadUrl);
+                await registerImage({ storageId });
+                setImageId(storageId);
+              })();
+            }}
+          />
+        </label>
         <button
           className="ob-btn ob-btn--sm ob-btn--primary"
-          disabled={!draft.trim()}
+          disabled={!draft.trim() && !imageId}
           onClick={() =>
-            void runOrToast(create({ body: draft, audience }), "Could not post story").then((ok) => {
-              if (ok !== undefined) setDraft("");
+            void runOrToast(
+              create({ body: draft, audience, imageId: imageId ?? undefined }),
+              "Could not post story",
+            ).then((ok) => {
+              if (ok !== undefined) {
+                setDraft("");
+                setImageId(null);
+                if (preview) URL.revokeObjectURL(preview);
+                setPreview(null);
+              }
             })
           }
         >
           Share
         </button>
       </div>
+      {preview && <img src={preview} alt="" className="ob-post-image" style={{ maxHeight: 120 }} />}
       {stories.length > 0 && (
         <div className="ob-row" style={{ overflowX: "auto", gap: 10, padding: "4px 0" }}>
           {stories.map((s) => (
             <div key={s._id} className="ob-card" style={{ minWidth: 120, padding: 8 }}>
               <div className="ob-bold ob-small">{s.author.displayName}</div>
               <div className="ob-small">{s.body}</div>
+              {s.imageUrl ? <img src={s.imageUrl} alt="" className="ob-post-image" style={{ maxHeight: 80 }} /> : null}
             </div>
           ))}
         </div>

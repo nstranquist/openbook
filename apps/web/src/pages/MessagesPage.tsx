@@ -138,6 +138,53 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
   );
 }
 
+function ChatSearch() {
+  const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(q.trim()), 200);
+    return () => clearTimeout(handle);
+  }, [q]);
+  const hits = useQuery(api.messages.search, debounced ? { q: debounced } : "skip");
+  if (!hits || hits.length === 0) {
+    return (
+      <input
+        className="g-input"
+        placeholder="Search messages"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search messages"
+        style={{ margin: "8px 12px", width: "calc(100% - 24px)" }}
+      />
+    );
+  }
+  return (
+    <div>
+      <input
+        className="g-input"
+        placeholder="Search messages"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search messages"
+        style={{ margin: "8px 12px", width: "calc(100% - 24px)" }}
+      />
+      {hits.map((h) => (
+        <button
+          key={h._id}
+          type="button"
+          className="ob-menu-item"
+          onClick={() => navigate(`/messages/${h.conversationId}`)}
+        >
+          <span className="ob-small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {h.body}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function MessagesPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
   const conversations = useQuery(api.messages.myConversations);
@@ -147,6 +194,7 @@ export function MessagesPage() {
     <div className="ob-msg-layout ob-reveal">
       <div className={`ob-msg-side${conversationId ? " hidden-mobile" : ""}`}>
         <div className="ob-menu-head">Chats</div>
+        <ChatSearch />
         {(conversations ?? []).length === 0 && (
           <div className="ob-empty ob-small">
             No conversations yet. Open a friend's profile and hit 💬 Message.

@@ -2,7 +2,8 @@
 
 Openbook's production dependency tree is checked with
 `go run ./tools/license-audit/main.go`. The current production packages report
-only MIT, ISC, and Apache-2.0 licenses. Complete package names, versions,
+only MIT, ISC, Apache-2.0, and MPL-2.0 (`web-push` / `http_ece` for VAPID
+web push) licenses. Complete package names, versions,
 authors, and upstream homepages can be reproduced from the pinned lockfile with:
 
 ```text

@@ -724,6 +724,37 @@ describe("privacy, reports, stories, events, search", () => {
   });
 });
 
+describe("message search and push config", () => {
+  it("message search is scoped to the viewer's threads", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const mallory = await actor(t, "Mallory");
+    await befriend(alice, bob);
+    const conv = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    await alice.as.mutation(api.messages.send, {
+      conversationId: conv, body: "unique-dm-token-xyz",
+    });
+    expect(
+      (await alice.as.query(api.messages.search, { q: "unique-dm-token-xyz" })).map((m: any) => m.body),
+    ).toContain("unique-dm-token-xyz");
+    expect(await mallory.as.query(api.messages.search, { q: "unique-dm-token-xyz" })).toEqual([]);
+  });
+
+  it("vapidPublicKey is null when unset; http endpoints are refused", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    expect(await alice.as.query(api.push.vapidPublicKey, {})).toBeNull();
+    await expect(
+      alice.as.mutation(api.push.subscribe, {
+        endpoint: "http://example.test/push",
+        p256dh: "x",
+        auth: "y",
+      }),
+    ).rejects.toThrow(/invalid push endpoint/i);
+  });
+});
+
 describe("mute and groups", () => {
   it("mute hides public posts from the muter's feed only", async () => {
     const t = convexTest(schema, modules);

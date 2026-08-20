@@ -15,6 +15,7 @@ import {
   requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
+import { internal } from "./_generated/api";
 
 export const MAX_MESSAGE_LENGTH = 4000;
 
@@ -81,11 +82,12 @@ export const open = mutation({
       throw new Error("You cannot message this user");
     }
     if (existing) {
-      const member = await memberRow(ctx, existing._id, me);
+      const conversationId = existing._id as Id<"conversations">;
+      const member = await memberRow(ctx, conversationId, me);
       if (member?.hiddenAt) {
         await ctx.db.patch(member._id, { hiddenAt: undefined });
       }
-      return existing._id;
+      return conversationId;
     }
     if (!(await areFriends(ctx, me, userId))) {
       throw new Error("You can only message friends");
@@ -131,6 +133,18 @@ export const send = mutation({
         unreadCount:
           userId === me ? member.unreadCount : member.unreadCount + 1,
         hiddenAt: userId === me ? member.hiddenAt : undefined,
+      });
+    }
+    if (
+      otherId &&
+      process.env.VAPID_PUBLIC_KEY &&
+      process.env.VAPID_PRIVATE_KEY
+    ) {
+      await ctx.scheduler.runAfter(0, internal.pushSend.sendToUser, {
+        userId: otherId,
+        title: "Openbook",
+        body: "New message",
+        url: `/messages/${conversationId}`,
       });
     }
     return id;

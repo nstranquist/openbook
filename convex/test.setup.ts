@@ -10,7 +10,7 @@ export const modules = import.meta.glob("./**/*.ts") as Record<
 >;
 
 for (const path of Object.keys(modules)) {
-  if (/\/(auth|http|crons)\.ts$/.test(path) || /\.test\.ts$/.test(path) || /test\.setup\.ts$/.test(path)) {
+  if (/\/(auth|http|crons|pushSend)\.ts$/.test(path) || /\.test\.ts$/.test(path) || /test\.setup\.ts$/.test(path)) {
     delete modules[path];
   }
 }

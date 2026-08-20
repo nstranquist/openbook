@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireActiveUser } from "./lib/social";
 
 export const subscribe = mutation({
@@ -52,5 +52,27 @@ export const mine = query({
       .query("pushSubscriptions")
       .withIndex("by_user", (q) => q.eq("userId", me))
       .take(8);
+  },
+});
+
+export const vapidPublicKey = query({
+  args: {},
+  handler: async () => process.env.VAPID_PUBLIC_KEY ?? null,
+});
+
+export const forUser = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    return await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+  },
+});
+
+export const drop = internalMutation({
+  args: { id: v.id("pushSubscriptions") },
+  handler: async (ctx, { id }) => {
+    await ctx.db.delete(id);
   },
 });

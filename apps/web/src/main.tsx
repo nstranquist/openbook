@@ -16,7 +16,7 @@ const convex = createConvexClient(resolveConvexUrl(import.meta.env));
 function Root() {
   useEffect(() => {
     initTheme();
-    if ("serviceWorker" in navigator && import.meta.env.PROD) {
+    if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js");
     }
   }, []);
