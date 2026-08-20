@@ -54,13 +54,23 @@ describe("verifyStripeSignature", () => {
 
 describe("assertSafeReturnUrl", () => {
   const site = "https://openbook.example";
-  it("allows the deployment origin and local http hosts", () => {
+  it("allows the deployment origin", () => {
     expect(() =>
       assertSafeReturnUrl("https://openbook.example/?billing=success", { siteUrl: site }),
     ).not.toThrow();
+  });
+  it("allows loopback only when SITE_URL is unset or local http", () => {
+    expect(() =>
+      assertSafeReturnUrl("http://127.0.0.1:5173/?billing=success", { siteUrl: "" }),
+    ).not.toThrow();
+    expect(() =>
+      assertSafeReturnUrl("http://127.0.0.1:5173/?billing=success", {
+        siteUrl: "http://localhost:5173",
+      }),
+    ).not.toThrow();
     expect(() =>
       assertSafeReturnUrl("http://127.0.0.1:5173/?billing=success", { siteUrl: site }),
-    ).not.toThrow();
+    ).toThrow(/not allowed/i);
   });
   it("rejects an attacker origin", () => {
     expect(() =>

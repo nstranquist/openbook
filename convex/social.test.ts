@@ -4,6 +4,7 @@ import schema from "./schema";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { modules } from "./test.setup";
+import { pairKey } from "./lib/social";
 
 // The social domain against the real schema: friendship lifecycle, feed
 // visibility, exact denormalized tallies, notification fan-out, and DM unread
@@ -214,19 +215,20 @@ describe("posts + feed visibility", () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
     const mallory = await actor(t, "Mallory");
+    await alice.as.mutation(api.posts.create, {
+      body: "visible public", audience: "public",
+    });
     for (let i = 0; i < 5; i++) {
       await alice.as.mutation(api.posts.create, {
         body: `secret-${i}`, audience: "friends",
       });
     }
-    await alice.as.mutation(api.posts.create, {
-      body: "visible public", audience: "public",
-    });
     const page = await mallory.as.query(api.posts.feed, {
       paginationOpts: { numItems: 3, cursor: null },
     });
     expect(page.page.map((p: any) => p.body)).toContain("visible public");
-    expect(page.page.map((p: any) => p.body)).not.toContain("secret-0");
+    expect(page.page.every((p: any) => !String(p.body).startsWith("secret-"))).toBe(true);
+    expect(page.isDone).toBe(true);
   });
 
   it("posts.get hides friends-only posts from strangers", async () => {
@@ -494,5 +496,58 @@ describe("messages", () => {
     await expect(
       mallory.as.mutation(api.messages.open, { userId: alice.userId }),
     ).rejects.toThrow(/friends/i);
+  });
+
+  it("open keeps messages when a newer empty pair-row exists", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const conv = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    await alice.as.mutation(api.messages.send, { conversationId: conv, body: "keep me" });
+    await t.run(async (ctx) => {
+      const now = Date.now() + 5_000;
+      const extra = await ctx.db.insert("conversations", {
+        pairKey: pairKey(alice.userId, bob.userId),
+        participantIds: [alice.userId, bob.userId],
+        lastMessageAt: now,
+        lastMessageBody: "",
+      });
+      for (const userId of [alice.userId, bob.userId]) {
+        await ctx.db.insert("conversationMembers", {
+          conversationId: extra,
+          userId,
+          lastActivityAt: now,
+          unreadCount: 0,
+        });
+      }
+    });
+    const opened = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    const thread = await alice.as.query(api.messages.list, {
+      conversationId: opened, paginationOpts: firstPage,
+    });
+    expect(thread.page.map((m: any) => m.body)).toContain("keep me");
+  });
+});
+
+describe("pair collapse", () => {
+  it("duplicate friendships do not throw; accepted wins", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("friendships", {
+        requesterId: alice.userId,
+        addresseeId: bob.userId,
+        status: "pending",
+        pairKey: pairKey(alice.userId, bob.userId),
+        createdAt: Date.now(),
+      });
+    });
+    const list = await alice.as.query(api.friends.list, {});
+    expect(list.some((f: any) => f.userId === bob.userId)).toBe(true);
+    await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
+    expect(await alice.as.query(api.friends.list, {})).toEqual([]);
   });
 });

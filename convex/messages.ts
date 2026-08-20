@@ -21,11 +21,8 @@ async function getOrCreateConversation(
   const other = await ctx.db.get(otherId);
   if (!other) throw new Error("User not found");
   const key = pairKey(me, otherId);
-  const existing = await ctx.db
-    .query("conversations")
-    .withIndex("by_pair", (q) => q.eq("pairKey", key))
-    .unique();
-  if (existing) return existing;
+  const existing = await collapseDuplicatePairRows(ctx, "conversations", key);
+  if (existing) return existing as Doc<"conversations">;
   const now = Date.now();
   const conversationId = await ctx.db.insert("conversations", {
     pairKey: key,
@@ -69,11 +66,7 @@ export const open = mutation({
     if (!me) throw new Error("Not authenticated");
     if (me === userId) throw new Error("You cannot message yourself");
     const key = pairKey(me, userId);
-    await collapseDuplicatePairRows(ctx, "conversations", key);
-    const existing = await ctx.db
-      .query("conversations")
-      .withIndex("by_pair", (q) => q.eq("pairKey", key))
-      .unique();
+    const existing = await collapseDuplicatePairRows(ctx, "conversations", key);
     if (existing) return existing._id;
     if (!(await areFriends(ctx, me, userId))) {
       throw new Error("You can only message friends");

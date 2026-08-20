@@ -25,15 +25,30 @@ export function pairKey(a: Id<"users">, b: Id<"users">): string {
   return [a, b].sort().join(":");
 }
 
+function pickFriendship(rows: Doc<"friendships">[]): Doc<"friendships"> | null {
+  if (rows.length === 0) return null;
+  const accepted = rows.filter((row) => row.status === "accepted");
+  const pool = accepted.length > 0 ? accepted : rows;
+  return [...pool].sort((a, b) => a._creationTime - b._creationTime)[0] ?? null;
+}
+
 export async function friendshipForPair(
   ctx: QueryCtx | MutationCtx,
   a: Id<"users">,
   b: Id<"users">,
 ): Promise<Doc<"friendships"> | null> {
-  return await ctx.db
+  const rows = await ctx.db
     .query("friendships")
     .withIndex("by_pair", (q) => q.eq("pairKey", pairKey(a, b)))
-    .unique();
+    .collect();
+  const keep = pickFriendship(rows);
+  if (!keep) return null;
+  if (rows.length > 1 && "insert" in ctx.db) {
+    for (const extra of rows) {
+      if (extra._id !== keep._id) await ctx.db.delete(extra._id);
+    }
+  }
+  return keep;
 }
 
 export async function areFriends(
@@ -135,36 +150,89 @@ export async function requireVisiblePost(
   return post;
 }
 
-// pairKey is not a unique index. Two concurrent inserts can land two rows.
-// Keep the oldest document and delete the extras so later .unique() reads
-// do not throw.
+function pickConversation(rows: Doc<"conversations">[]): Doc<"conversations"> | null {
+  if (rows.length === 0) return null;
+  return [...rows].sort((a, b) => {
+    const aBody = a.lastMessageBody.trim() ? 1 : 0;
+    const bBody = b.lastMessageBody.trim() ? 1 : 0;
+    if (aBody !== bBody) return bBody - aBody;
+    if (a.lastMessageAt !== b.lastMessageAt) return b.lastMessageAt - a.lastMessageAt;
+    return b._creationTime - a._creationTime;
+  })[0] ?? null;
+}
+
+async function reparentConversation(
+  ctx: MutationCtx,
+  extra: Doc<"conversations">,
+  keep: Doc<"conversations">,
+): Promise<void> {
+  const messages = await ctx.db
+    .query("messages")
+    .withIndex("by_conversation", (q) => q.eq("conversationId", extra._id))
+    .collect();
+  for (const message of messages) {
+    await ctx.db.patch(message._id, { conversationId: keep._id });
+  }
+  const extraMembers = await ctx.db
+    .query("conversationMembers")
+    .withIndex("by_conversation_user", (q) => q.eq("conversationId", extra._id))
+    .collect();
+  for (const extraMember of extraMembers) {
+    const keepMember = await ctx.db
+      .query("conversationMembers")
+      .withIndex("by_conversation_user", (q) =>
+        q.eq("conversationId", keep._id).eq("userId", extraMember.userId),
+      )
+      .unique();
+    if (keepMember) {
+      await ctx.db.patch(keepMember._id, {
+        unreadCount: keepMember.unreadCount + extraMember.unreadCount,
+        lastActivityAt: Math.max(keepMember.lastActivityAt, extraMember.lastActivityAt),
+      });
+      await ctx.db.delete(extraMember._id);
+    } else {
+      await ctx.db.patch(extraMember._id, { conversationId: keep._id });
+    }
+  }
+  if (extra.lastMessageAt >= keep.lastMessageAt) {
+    await ctx.db.patch(keep._id, {
+      lastMessageAt: extra.lastMessageAt,
+      lastMessageBody: extra.lastMessageBody,
+      lastSenderId: extra.lastSenderId,
+    });
+  }
+  await ctx.db.delete(extra._id);
+}
+
+// pairKey is not unique. Concurrent inserts can land two rows. Mutations
+// collapse to one document; queries pick without throwing.
 export async function collapseDuplicatePairRows(
   ctx: MutationCtx,
   table: "friendships" | "conversations",
   key: string,
 ): Promise<Doc<"friendships"> | Doc<"conversations"> | null> {
+  if (table === "friendships") {
+    const rows = await ctx.db
+      .query("friendships")
+      .withIndex("by_pair", (q) => q.eq("pairKey", key))
+      .collect();
+    const keep = pickFriendship(rows);
+    if (!keep) return null;
+    for (const extra of rows) {
+      if (extra._id !== keep._id) await ctx.db.delete(extra._id);
+    }
+    return keep;
+  }
   const rows = await ctx.db
-    .query(table)
+    .query("conversations")
     .withIndex("by_pair", (q) => q.eq("pairKey", key))
     .collect();
-  if (rows.length === 0) return null;
-  rows.sort((a, b) => a._creationTime - b._creationTime);
-  const keep = rows[0];
+  const keep = pickConversation(rows);
   if (!keep) return null;
-  if (rows.length === 1) return keep;
-  for (const extra of rows.slice(1)) {
-    if (table === "conversations") {
-      const members = await ctx.db
-        .query("conversationMembers")
-        .withIndex("by_conversation_user", (q) =>
-          q.eq("conversationId", extra._id as Id<"conversations">),
-        )
-        .collect();
-      for (const member of members) await ctx.db.delete(member._id);
-    }
-    await ctx.db.delete(extra._id);
+  for (const extra of rows) {
+    if (extra._id !== keep._id) await reparentConversation(ctx, extra, keep);
   }
-  return keep;
+  return (await ctx.db.get(keep._id)) ?? keep;
 }
 
 export interface EnrichedPost {

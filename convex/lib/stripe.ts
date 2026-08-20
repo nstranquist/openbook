@@ -41,11 +41,22 @@ export function assertSafeReturnUrl(
     throw new Error("Return URL must not include credentials");
   }
   const site = (opts?.siteUrl ?? process.env.SITE_URL ?? "").trim();
-  const allowed = new Set<string>();
   const siteOrigin = site ? originOf(site) : null;
-  if (siteOrigin) allowed.add(siteOrigin);
-  if (isLocalDevHost(parsed.hostname) && parsed.protocol === "http:") return;
-  if (allowed.has(parsed.origin)) return;
+  const siteIsLocalHttp =
+    !!site &&
+    (() => {
+      try {
+        const s = new URL(site);
+        return s.protocol === "http:" && isLocalDevHost(s.hostname);
+      } catch {
+        return false;
+      }
+    })();
+  const allowLoopback = !site || siteIsLocalHttp;
+  if (allowLoopback && isLocalDevHost(parsed.hostname) && parsed.protocol === "http:") {
+    return;
+  }
+  if (siteOrigin && parsed.origin === siteOrigin) return;
   throw new Error("Return URL origin is not allowed");
 }
 

@@ -51,13 +51,13 @@ export const sendRequest = mutation({
       pairKey: key,
       createdAt: Date.now(),
     });
-    await collapseDuplicatePairRows(ctx, "friendships", key);
+    const kept = await collapseDuplicatePairRows(ctx, "friendships", key);
     await notify(ctx, {
       userId: addresseeId,
       actorId: requesterId,
       kind: "friend_request",
     });
-    return id;
+    return kept && "_id" in kept ? kept._id : id;
   },
 });
 
