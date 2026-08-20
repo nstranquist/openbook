@@ -1,9 +1,11 @@
 import { api } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
+import { runOrToast } from "../lib/run";
 
 // Home: the classic three-column layout. Left rail = identity + shortcuts,
 // center = composer + the paginated reactive feed, right rail = contacts
@@ -38,8 +40,11 @@ function RightRail() {
   const navigate = useNavigate();
 
   async function message(userId: string) {
-    const conversationId = await openDm({ userId: userId as never });
-    navigate(`/messages/${conversationId}`);
+    const conversationId = await runOrToast(
+      openDm({ userId: userId as never }),
+      "Could not open messages",
+    );
+    if (conversationId) navigate(`/messages/${conversationId}`);
   }
 
   return (
@@ -70,7 +75,7 @@ function RightRail() {
                   </div>
                 )}
               </span>
-              <button className="ob-btn ob-btn--sm" onClick={() => void sendRequest({ userId: s.userId as never })}>
+              <button className="ob-btn ob-btn--sm" onClick={() => void runOrToast(sendRequest({ userId: s.userId as never }), "Could not send request")}>
                 Add
               </button>
             </div>
@@ -108,16 +113,21 @@ export function FeedPage() {
     {},
     { initialNumItems: 10 },
   );
+  useEffect(() => {
+    if (status === "CanLoadMore" && results.length === 0) loadMore(10);
+  }, [status, results.length, loadMore]);
+  const empty = results.length === 0 && status === "Exhausted";
+  const loading = status === "LoadingFirstPage" || (results.length === 0 && status === "CanLoadMore");
   return (
     <div className="ob-grid">
       <LeftRail />
       <div className="ob-stack">
         <Composer />
-        {status === "LoadingFirstPage" ? (
+        {loading ? (
           <div aria-busy="true" aria-label="Loading your feed">
             <FeedSkeleton />
           </div>
-        ) : results.length === 0 ? (
+        ) : empty ? (
           <div className="ob-card ob-empty-cta">
             <p className="ob-bold" style={{ fontSize: 17 }}>
               Your feed is waiting

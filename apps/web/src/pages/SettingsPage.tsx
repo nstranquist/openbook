@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { ThemeToggle, toast } from "../ui/garrid";
 import { Avatar } from "../components/Avatar";
+import { BillingPanel } from "../components/BillingPanel";
 
 // SettingsPage — a real, backend-wired settings surface: profile edit (→
 // profiles.update), appearance (DS ThemeToggle), and account/danger-zone.
@@ -77,6 +78,8 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <BillingPanel />
 
       <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
         <div className="g-spread">

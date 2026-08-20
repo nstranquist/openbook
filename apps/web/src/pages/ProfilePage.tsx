@@ -2,6 +2,7 @@ import { api, profileInput, type Id } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { runOrToast } from "../lib/run";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
@@ -30,9 +31,9 @@ function FriendButton({
     <button
       className="ob-btn"
       onClick={() =>
-        void openDm({ userId }).then((conversationId) =>
-          navigate(`/messages/${conversationId}`),
-        )
+        void runOrToast(openDm({ userId }), "Could not open messages").then((conversationId) => {
+          if (conversationId) navigate(`/messages/${conversationId}`);
+        })
       }
     >
       💬 Message
@@ -42,28 +43,26 @@ function FriendButton({
     case "none":
       return (
         <span className="ob-row" style={{ gap: 8 }}>
-          <button className="ob-btn ob-btn--primary" onClick={() => void sendRequest({ userId })}>
+          <button className="ob-btn ob-btn--primary" onClick={() => void runOrToast(sendRequest({ userId }), "Could not send request")}>
             ➕ Add Friend
           </button>
-          {dmButton}
         </span>
       );
     case "outgoing_request":
       return (
         <span className="ob-row" style={{ gap: 8 }}>
-          <button className="ob-btn" onClick={() => void cancelRequest({ userId })}>
+          <button className="ob-btn" onClick={() => void runOrToast(cancelRequest({ userId }), "Could not cancel")}>
             Cancel Request
           </button>
-          {dmButton}
         </span>
       );
     case "incoming_request":
       return (
         <span className="ob-row" style={{ gap: 8 }}>
-          <button className="ob-btn ob-btn--primary" onClick={() => void accept({ userId })}>
+          <button className="ob-btn ob-btn--primary" onClick={() => void runOrToast(accept({ userId }), "Could not accept")}>
             Confirm Request
           </button>
-          <button className="ob-btn" onClick={() => void decline({ userId })}>
+          <button className="ob-btn" onClick={() => void runOrToast(decline({ userId }), "Could not decline")}>
             Delete Request
           </button>
         </span>
@@ -74,7 +73,7 @@ function FriendButton({
           <button
             className="ob-btn"
             onClick={() => {
-              if (confirm("Remove this friend?")) void unfriend({ userId });
+              if (confirm("Remove this friend?")) void runOrToast(unfriend({ userId }), "Could not unfriend");
             }}
           >
             ✓ Friends

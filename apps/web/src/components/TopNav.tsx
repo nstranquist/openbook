@@ -25,8 +25,13 @@ function useClickOutside(onAway: () => void) {
 
 function SearchBox() {
   const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [open, setOpen] = useState(false);
-  const results = useQuery(api.profiles.search, q.trim() ? { q } : "skip");
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(q.trim()), 200);
+    return () => clearTimeout(handle);
+  }, [q]);
+  const results = useQuery(api.profiles.search, debounced ? { q: debounced } : "skip");
   const ref = useClickOutside(() => setOpen(false));
   const navigate = useNavigate();
   return (
@@ -123,9 +128,9 @@ function NotificationsBell() {
                 onClick={() => {
                   void markRead({ id: n._id });
                   setOpen(false);
-                  navigate(
-                    n.kind === "friend_request" ? "/friends" : `/profile/${n.actor.userId}`,
-                  );
+                  if (n.postId) navigate(`/post/${n.postId}`);
+                  else if (n.kind === "friend_request") navigate("/friends");
+                  else navigate(`/profile/${n.actor.userId}`);
                 }}
               >
                 <Avatar name={n.actor.displayName} hue={n.actor.avatarHue} size={36} />

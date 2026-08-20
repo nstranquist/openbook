@@ -7,6 +7,7 @@ import { TopNav } from "./components/TopNav";
 import { FeedPage } from "./pages/FeedPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { MessagesPage } from "./pages/MessagesPage";
+import { PostPage } from "./pages/PostPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -54,6 +55,7 @@ export function App() {
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/messages/:conversationId" element={<MessagesPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
+          <Route path="/post/:postId" element={<PostPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

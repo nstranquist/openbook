@@ -1,10 +1,8 @@
-// Local-only login memory. Credentials never leave this device: they live in
-// localStorage so the form can prefill (and optionally sign in) on next run.
+// Local-only email memory. The Convex Auth session is the login; we never
+// persist a password in localStorage.
 
 export type SavedLogin = {
   email: string;
-  password: string;
-  autoSignIn: boolean;
 };
 
 const KEY = "openbook.savedLogin.v1";
@@ -13,15 +11,11 @@ export function loadSavedLogin(): SavedLogin | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SavedLogin>;
-    if (typeof parsed.email !== "string" || typeof parsed.password !== "string") {
+    const parsed = JSON.parse(raw) as Partial<SavedLogin> & { password?: unknown };
+    if (typeof parsed.email !== "string" || !parsed.email.trim()) {
       return null;
     }
-    return {
-      email: parsed.email,
-      password: parsed.password,
-      autoSignIn: parsed.autoSignIn === true,
-    };
+    return { email: parsed.email };
   } catch {
     return null;
   }
@@ -29,7 +23,7 @@ export function loadSavedLogin(): SavedLogin | null {
 
 export function saveLogin(login: SavedLogin): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(login));
+    localStorage.setItem(KEY, JSON.stringify({ email: login.email }));
   } catch {
     // Private-mode / quota failures just mean no prefill next run.
   }

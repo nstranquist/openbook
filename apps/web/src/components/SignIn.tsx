@@ -12,9 +12,8 @@ export function SignIn() {
   const saved = useRef(loadSavedLogin()).current;
   const [name, setName] = useState("");
   const [email, setEmail] = useState(saved?.email ?? "");
-  const [password, setPassword] = useState(saved?.password ?? "");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(saved !== null);
-  const [autoSignIn, setAutoSignIn] = useState(saved?.autoSignIn ?? true);
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"form" | "dev" | false>(false);
@@ -36,7 +35,7 @@ export function SignIn() {
       } else {
         await signIn(email, password);
       }
-      if (remember) saveLogin({ email, password, autoSignIn });
+      if (remember) saveLogin({ email });
       else clearSavedLogin();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
@@ -59,7 +58,7 @@ export function SignIn() {
       }
       // Persist the throwaway identity too, when asked — otherwise the one-click
       // path can never be remembered across launches.
-      if (remember) saveLogin({ email: dev.email, password: dev.password, autoSignIn });
+      if (remember) saveLogin({ email: dev.email });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Dev sign-in failed");
     } finally {
@@ -144,14 +143,8 @@ export function SignIn() {
         />
         <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy !== false} />
-          <span>Remember me on this device</span>
+          <span>Remember my email on this device</span>
         </label>
-        {remember && (
-          <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={autoSignIn} onChange={(e) => setAutoSignIn(e.target.checked)} disabled={busy !== false} />
-            <span>Log in automatically on launch</span>
-          </label>
-        )}
         <button
           type="submit"
           className="ob-btn ob-btn--primary ob-auth-submit"

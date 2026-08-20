@@ -2,11 +2,8 @@ import { api } from "@openbook/shared";
 import { useAction, useQuery } from "convex/react";
 import { useState } from "react";
 
-// BillingPanel — the SaaS kit's billing surface. Shows the signed-in user's plan
-// + usage and (Stripe TEST mode) an Upgrade-to-Pro checkout / Manage-billing
-// portal. Backed by convex/billing.ts; the webhook syncs the plan back here. When
-// the deployment has no Stripe keys, the Upgrade button surfaces the setup error
-// instead of charging anyone. Delete this for a non-billable suite.
+// Plan + usage, with Stripe TEST checkout when keys are configured on the
+// deployment. Rendered from Settings so the free-tier post cap is visible.
 export function BillingPanel() {
   const plan = useQuery(api.billing.getMyPlan, {});
   const createCheckout = useAction(api.billing.createCheckout);
@@ -17,6 +14,8 @@ export function BillingPanel() {
   if (plan === undefined) return null;
   const current = plan?.plan ?? "free";
   const isPaid = current === "pro";
+  const postLimit = plan?.limits.posts;
+  const usage = plan?.usage.posts ?? 0;
 
   async function go(fn: () => Promise<{ url: string }>) {
     setError(null);
@@ -24,49 +23,56 @@ export function BillingPanel() {
     try {
       const { url } = await fn();
       window.location.href = url;
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section style={{ border: "1px solid #eee", borderRadius: 8, padding: "12px 16px", margin: "12px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span>
-          Plan: <strong>{current}</strong>
-          {plan?.status && current !== "free" ? ` · ${plan.status}` : ""}
-        </span>
+    <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+      <div className="g-card-head">
+        <div className="g-card-title">Plan</div>
+        <strong style={{ textTransform: "capitalize" }}>{current}</strong>
+      </div>
+      <p className="g-hint">
+        Posts: {usage} / {postLimit ?? "unlimited"}
+        {plan?.status && current !== "free" ? ` · ${plan.status}` : ""}
+      </p>
+      <div className="g-row" style={{ justifyContent: "flex-end", marginTop: "var(--space-3)" }}>
         {!isPaid ? (
           <button
+            type="button"
+            className="g-btn g-btn--primary"
             disabled={busy}
             onClick={() =>
               void go(() =>
                 createCheckout({
-                  successUrl: `${window.location.origin}/?billing=success`,
-                  cancelUrl: `${window.location.origin}/?billing=cancelled`,
+                  successUrl: `${window.location.origin}/settings?billing=success`,
+                  cancelUrl: `${window.location.origin}/settings?billing=cancelled`,
                 }),
               )
             }
           >
-            Upgrade to Pro
+            {busy ? "Working…" : "Upgrade to Pro"}
           </button>
         ) : (
           <button
+            type="button"
+            className="g-btn"
             disabled={busy || !plan?.hasStripeCustomer}
-            onClick={() => void go(() => createPortal({ returnUrl: window.location.origin }))}
+            onClick={() => void go(() => createPortal({ returnUrl: `${window.location.origin}/settings` }))}
           >
             Manage billing
           </button>
         )}
       </div>
-      {plan?.limits && (
-        <p style={{ color: "#666", fontSize: 13, margin: "8px 0 0" }}>
-          Posts: {plan.usage.posts} / {plan.limits.posts ?? "∞"} · checkout runs in Stripe (test mode).
+      {error && (
+        <p className="ob-small" style={{ color: "var(--danger)", marginTop: "var(--space-3)" }}>
+          {error}
         </p>
       )}
-      {error && <p style={{ color: "#c00", fontSize: 13, margin: "8px 0 0" }}>{error}</p>}
-    </section>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { api, type Id } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { Avatar } from "../components/Avatar";
+import { runOrToast } from "../lib/run";
 
 // Friend center: incoming requests (Confirm/Delete), outgoing (Cancel),
 // People You May Know (ranked by mutual friends), and the full friends list.
@@ -71,10 +72,10 @@ export function FriendsPage() {
             <div className="ob-people-grid">
               {requests!.incoming.map((p) => (
                 <PersonCard key={p.userId} userId={p.userId} displayName={p.displayName} avatarHue={p.avatarHue}>
-                  <button className="ob-btn ob-btn--primary ob-btn--sm" onClick={() => void accept({ userId: asId(p.userId) })}>
+                  <button className="ob-btn ob-btn--primary ob-btn--sm" onClick={() => void runOrToast(accept({ userId: asId(p.userId) }), "Could not accept")}>
                     Confirm
                   </button>
-                  <button className="ob-btn ob-btn--sm" onClick={() => void decline({ userId: asId(p.userId) })}>
+                  <button className="ob-btn ob-btn--sm" onClick={() => void runOrToast(decline({ userId: asId(p.userId) }), "Could not decline")}>
                     Delete
                   </button>
                 </PersonCard>
@@ -88,7 +89,7 @@ export function FriendsPage() {
             <div className="ob-people-grid">
               {requests!.outgoing.map((p) => (
                 <PersonCard key={p.userId} userId={p.userId} displayName={p.displayName} avatarHue={p.avatarHue} subtitle="Request sent">
-                  <button className="ob-btn ob-btn--sm" onClick={() => void cancelRequest({ userId: asId(p.userId) })}>
+                  <button className="ob-btn ob-btn--sm" onClick={() => void runOrToast(cancelRequest({ userId: asId(p.userId) }), "Could not cancel")}>
                     Cancel
                   </button>
                 </PersonCard>
@@ -112,7 +113,7 @@ export function FriendsPage() {
                   avatarHue={s.avatarHue}
                   subtitle={s.mutualCount > 0 ? `${s.mutualCount} mutual friend${s.mutualCount === 1 ? "" : "s"}` : undefined}
                 >
-                  <button className="ob-btn ob-btn--primary ob-btn--sm" onClick={() => void sendRequest({ userId: asId(s.userId) })}>
+                  <button className="ob-btn ob-btn--primary ob-btn--sm" onClick={() => void runOrToast(sendRequest({ userId: asId(s.userId) }), "Could not send request")}>
                     Add Friend
                   </button>
                 </PersonCard>
@@ -131,7 +132,7 @@ export function FriendsPage() {
                   <button
                     className="ob-btn ob-btn--sm"
                     onClick={() => {
-                      if (confirm(`Unfriend ${f.displayName}?`)) void unfriend({ userId: asId(f.userId) });
+                      if (confirm(`Unfriend ${f.displayName}?`)) void runOrToast(unfriend({ userId: asId(f.userId) }), "Could not unfriend");
                     }}
                   >
                     Unfriend

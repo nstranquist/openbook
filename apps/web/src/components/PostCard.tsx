@@ -11,6 +11,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "./Avatar";
 import { timeAgo } from "../lib/format";
+import { runOrToast } from "../lib/run";
 
 // One feed story: header, body, reaction summary, Like/Comment actions with
 // the hover reaction picker, and the inline comment thread. Everything
@@ -86,7 +87,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
     const parsed = commentInput.safeParse({ body: draft });
     if (!parsed.success) return;
     setDraft("");
-    await addComment({ postId, body: parsed.data.body });
+    await runOrToast(addComment({ postId, body: parsed.data.body }), "Could not comment");
   }
 
   return (
@@ -109,7 +110,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
                   <button
                     className="ob-btn--danger-ghost"
                     style={{ border: 0, background: "none", cursor: "pointer", fontSize: 12, padding: 0 }}
-                    onClick={() => void removeComment({ id: c._id })}
+                    onClick={() => void runOrToast(removeComment({ id: c._id }), "Could not delete comment")}
                   >
                     Delete
                   </button>
@@ -140,13 +141,26 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
   const removePost = useMutation(api.posts.remove);
   const [showComments, setShowComments] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPinned, setPickerPinned] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function armHide() {
+    if (pickerPinned) return;
     hideTimer.current = setTimeout(() => setPickerOpen(false), 350);
   }
   function disarmHide() {
     if (hideTimer.current) clearTimeout(hideTimer.current);
+  }
+  function pinPicker() {
+    disarmHide();
+    setPickerPinned(true);
+    setPickerOpen(true);
+  }
+  function react(kind: ReactionKind) {
+    setPickerOpen(false);
+    setPickerPinned(false);
+    void runOrToast(toggleReaction({ postId: post._id, kind }), "Could not react");
   }
 
   const myReactionMeta = post.myReaction
@@ -175,7 +189,9 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
             title="Delete post"
             aria-label="Delete post"
             onClick={() => {
-              if (confirm("Delete this post?")) void removePost({ id: post._id });
+              if (confirm("Delete this post?")) {
+                void runOrToast(removePost({ id: post._id }), "Could not delete post");
+              }
             }}
           >
             🗑
@@ -194,11 +210,29 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           className={`ob-action${post.myReaction ? " reacted" : ""}`}
           onMouseEnter={() => { disarmHide(); setPickerOpen(true); }}
           onMouseLeave={armHide}
-          onClick={() =>
-            void toggleReaction({ postId: post._id, kind: post.myReaction ?? "like" })
-          }
+          onTouchStart={() => {
+            longPress.current = setTimeout(pinPicker, 450);
+          }}
+          onTouchEnd={() => {
+            if (longPress.current) clearTimeout(longPress.current);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            pinPicker();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === " ") {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                pinPicker();
+              }
+            }
+          }}
+          onClick={() => react(post.myReaction ?? "like")}
           aria-pressed={post.myReaction != null}
-          aria-label={myReactionMeta ? `Reacted: ${myReactionMeta.label}` : "Like"}
+          aria-haspopup="true"
+          aria-expanded={pickerOpen}
+          aria-label={myReactionMeta ? `Reacted: ${myReactionMeta.label}` : "Like. Long-press or ArrowDown for more reactions."}
         >
           {myReactionMeta ? (
             <>
@@ -225,8 +259,7 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
                   aria-label={r.label}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setPickerOpen(false);
-                    void toggleReaction({ postId: post._id, kind: r.kind });
+                    react(r.kind);
                   }}
                 >
                   {r.emoji}

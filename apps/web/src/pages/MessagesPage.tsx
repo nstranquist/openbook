@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Avatar } from "../components/Avatar";
 import { timeAgo } from "../lib/format";
+import { runOrToast } from "../lib/run";
 
 // Messenger: conversation list + active thread. Delivery is the reactive
 // query re-running on the other side — no socket code anywhere. Opening a
@@ -39,7 +40,7 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
     const parsed = messageInput.safeParse({ body: draft });
     if (!parsed.success) return;
     setDraft("");
-    await send({ conversationId, body: parsed.data.body });
+    await runOrToast(send({ conversationId, body: parsed.data.body }), "Could not send");
   }
 
   return (

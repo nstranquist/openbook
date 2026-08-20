@@ -1,8 +1,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 
-// The unified app-layer auth contract. Every lane's @openbook/shared exports
-// these exact signatures; only the implementation (here: Convex Auth) differs.
+// App-layer auth contract for the web client. Implementation is Convex Auth.
 // Social data access goes straight through `api` + convex/react hooks — the
 // reactive queries ARE the realtime layer.
 

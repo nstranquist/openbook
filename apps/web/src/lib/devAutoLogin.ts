@@ -1,6 +1,5 @@
 import { useAuth, useSession } from "@openbook/shared";
 import { useEffect, useState } from "react";
-import { loadSavedLogin } from "./savedLogin";
 
 type DevAutoLoginState = {
   enabled: boolean;
@@ -19,8 +18,7 @@ type DevAutoLoginEnv = ImportMetaEnv & {
 const attempted = new Set<string>();
 
 // Where the throwaway dev identity may exist at all. Vite dev servers always
-// qualify; a bundle only qualifies if it was built with VITE_OPENBOOK_DEV_LOGIN=1
-// (the desktop `bundle:local` target).
+// qualify; a bundle only qualifies if it was built with VITE_OPENBOOK_DEV_LOGIN=1.
 //
 // Both operands are written as static `import.meta.env.X` reads against literals
 // so Vite substitutes them at build time: in a production bundle this whole
@@ -63,13 +61,9 @@ export function isDevAutoLoginEnabled(): boolean {
   return isDevLoginAvailable() && truthy(env().VITE_OPENBOOK_AUTO_LOGIN);
 }
 
-// Auto sign-in sources, strongest first: a login the user saved with
-// "sign me in on launch" (any build), then the env-flag dev identity.
+// Auto sign-in is the throwaway dev identity only (env-flag, dev builds).
+// Remembered emails prefill the form; they never store a password.
 function autoLoginIdentity(): { email: string; password: string; signUpFallback: boolean } | null {
-  const saved = loadSavedLogin();
-  if (saved?.autoSignIn) {
-    return { email: saved.email, password: saved.password, signUpFallback: false };
-  }
   if (isDevAutoLoginEnabled()) {
     return { ...devIdentity(), signUpFallback: true };
   }
