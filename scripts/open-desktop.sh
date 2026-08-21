@@ -2,7 +2,7 @@
 # Open the running Openbook web app in a standalone desktop window
 # (Chrome/Edge/Chromium app mode). This is the KEP-002 desktop client.
 set -euo pipefail
-URL="${OPENBOOK_URL:-http://127.0.0.1:5173}"
+URL="${OPENBOOK_URL:-${OPENBOOK_WEB_URL:-http://127.0.0.1:5173}}"
 
 open_app() {
   local bin="$1"

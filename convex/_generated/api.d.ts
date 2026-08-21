@@ -19,6 +19,7 @@ import type * as friends from "../friends.js";
 import type * as gc from "../gc.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
+import type * as lib_mediaSign from "../lib/mediaSign.js";
 import type * as lib_plans from "../lib/plans.js";
 import type * as lib_rate from "../lib/rate.js";
 import type * as lib_social from "../lib/social.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   gc: typeof gc;
   groups: typeof groups;
   http: typeof http;
+  "lib/mediaSign": typeof lib_mediaSign;
   "lib/plans": typeof lib_plans;
   "lib/rate": typeof lib_rate;
   "lib/social": typeof lib_social;

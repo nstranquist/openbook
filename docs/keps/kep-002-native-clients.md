@@ -27,7 +27,9 @@ schema.
 
 - `manifest.webmanifest` + `sw.js` are served from `apps/web/public`.
 - `index.html` declares standalone display and theme color.
-- `scripts/open-desktop.sh` opens the running web app in app mode.
+- `scripts/open-desktop.sh` / `make desktop` opens the running web app in Chrome app mode.
+- `make desktop-tauri` cargo-checks the Tauri crate and opens a native window over `OPENBOOK_WEB_URL` (default `http://localhost:5173`) via `apps/desktop` `@tauri-apps/cli`.
+- `make mobile` installs Expo deps if needed and starts the WebView shell.
 - Service worker handles `push` / `notificationclick`. Settings can
   subscribe when `VAPID_PUBLIC_KEY` is set.
 

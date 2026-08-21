@@ -18,5 +18,6 @@ build/
 
 # Native client build output (Rust/Expo). Source stays in git.
 apps/desktop/src-tauri/target/
+apps/desktop/node_modules/
 apps/mobile/node_modules/
 apps/mobile/.expo/

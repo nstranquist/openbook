@@ -1,5 +1,8 @@
 .PHONY: help install test typecheck build verify verify-publication publish-ready export-publication desktop clean
 
+# Vite default. Override when 5173 is taken: OPENBOOK_WEB_URL=http://localhost:5174 make desktop-tauri
+OPENBOOK_WEB_URL ?= http://localhost:5173
+
 help:
 	@echo "openbook local targets:"
 	@echo "  make install              # pnpm install --frozen-lockfile"
@@ -7,7 +10,7 @@ help:
 	@echo "  make verify               # typecheck + test + build"
 	@echo "  make verify-publication   # full publication gate (incl. gitleaks)"
 	@echo "  make desktop              # Chrome/Edge app-mode window"
-	@echo "  make desktop-tauri        # cargo check the Tauri shell (optional)"
+	@echo "  make desktop-tauri        # cargo check + Tauri window over OPENBOOK_WEB_URL"
 	@echo "  make mobile               # Expo start (apps/mobile, optional)"
 	@echo "  make export-publication OUT=/path/to/empty-dir"
 
@@ -32,14 +35,16 @@ verify-publication:
 publish-ready: verify-publication
 
 desktop:
-	bash scripts/open-desktop.sh
+	OPENBOOK_URL="$(OPENBOOK_WEB_URL)" bash scripts/open-desktop.sh
 
 desktop-tauri:
 	@command -v cargo >/dev/null || (echo "cargo not installed; use make desktop" >&2; exit 2)
 	cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+	@test -d apps/desktop/node_modules || (cd apps/desktop && npm install)
+	cd apps/desktop && npx tauri dev --config '{"build":{"devUrl":"$(OPENBOOK_WEB_URL)"}}'
 
 mobile:
-	@test -d apps/mobile/node_modules || (echo "cd apps/mobile && npm install" >&2; exit 2)
+	@test -d apps/mobile/node_modules || (cd apps/mobile && npm install)
 	cd apps/mobile && npx expo start
 
 # Human-gated clean tree for public publish (OUT must be empty absolute path).
