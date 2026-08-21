@@ -81,9 +81,14 @@ function PasswordChange() {
   }
   return (
     <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
-      <div className="g-card-title">Password</div>
+      <div id="password-settings-title" className="g-card-title">Password</div>
       <div className="g-hint">Change your password while signed in. Social-login accounts skip this.</div>
-      <form className="g-stack ob-form" style={{ marginTop: "var(--space-3)" }} onSubmit={submit}>
+      <form
+        className="g-stack ob-form"
+        style={{ marginTop: "var(--space-3)" }}
+        aria-labelledby="password-settings-title"
+        onSubmit={submit}
+      >
         <Field label="Current password">
           <input
             className="g-input"
@@ -242,10 +247,11 @@ export function SettingsPage() {
     }
   }, [me, loaded]);
 
-  if (me === undefined) return <main style={mainStyle}><p className="ob-muted">Loading…</p></main>;
+  if (me === undefined) return <section style={mainStyle} aria-busy="true"><p className="ob-muted">Loading…</p></section>;
   if (me === null) return null;
 
-  async function save() {
+  async function save(event: FormEvent) {
+    event.preventDefault();
     setBusy(true);
     try {
       await update({ displayName, bio, work, location, bioAudience, friendsListPublic });
@@ -258,51 +264,84 @@ export function SettingsPage() {
   }
 
   return (
-    <main style={mainStyle}>
-      <h1 style={{ fontFamily: "var(--font-display)", marginBottom: "var(--space-5)" }}>Settings</h1>
+    <section style={mainStyle} aria-labelledby="settings-title">
+      <h1 id="settings-title" style={{ fontFamily: "var(--font-display)", marginBottom: "var(--space-5)" }}>Settings</h1>
 
-      <div className="g-card">
+      <form className="g-card" aria-labelledby="profile-settings-title" onSubmit={(event) => void save(event)}>
         <div className="g-card-head">
-          <div className="g-card-title">Profile</div>
+          <h2 id="profile-settings-title" className="g-card-title">Profile</h2>
           <Avatar name={displayName || me.displayName} hue={me.avatarHue} size={44} />
         </div>
         <div className="g-stack" style={{ gap: "var(--space-4)" }}>
-          <label className="g-field">
-            <span className="g-label">Display name</span>
-            <input className="g-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-          </label>
-          <label className="g-field">
-            <span className="g-label">Bio</span>
-            <textarea className="g-textarea" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Tell people about yourself" />
-          </label>
-          <div className="g-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
-            <label className="g-field" style={{ flex: 1 }}>
-              <span className="g-label">Work</span>
-              <input className="g-input" value={work} onChange={(e) => setWork(e.target.value)} />
-            </label>
-            <label className="g-field" style={{ flex: 1 }}>
-              <span className="g-label">Location</span>
-              <input className="g-input" value={location} onChange={(e) => setLocation(e.target.value)} />
-            </label>
+          <Field label="Display name">
+            <input
+              className="g-input"
+              name="displayName"
+              autoComplete="name"
+              maxLength={80}
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </Field>
+          <Field label="Bio" hint="Optional. Add up to 500 characters.">
+            <textarea
+              className="g-textarea"
+              name="bio"
+              maxLength={500}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+            />
+          </Field>
+          <div className="g-row ob-form-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
+            <Field label="Work" className="ob-grow">
+              <input
+                className="g-input"
+                name="work"
+                autoComplete="organization"
+                maxLength={500}
+                value={work}
+                onChange={(e) => setWork(e.target.value)}
+              />
+            </Field>
+            <Field label="Location" className="ob-grow">
+              <input
+                className="g-input"
+                name="location"
+                autoComplete="address-level2"
+                maxLength={500}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </Field>
           </div>
-          <label className="g-field">
-            <span className="g-label">About visibility</span>
-            <select className="g-input" value={bioAudience} onChange={(e) => setBioAudience(e.target.value as "public" | "friends")}>
+          <Field label="About visibility">
+            <select
+              className="g-input"
+              name="bioAudience"
+              value={bioAudience}
+              onChange={(e) => setBioAudience(e.target.value as "public" | "friends")}
+            >
               <option value="public">Public</option>
               <option value="friends">Friends only</option>
             </select>
-          </label>
+          </Field>
           <label className="ob-small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={friendsListPublic} onChange={(e) => setFriendsListPublic(e.target.checked)} />
+            <input
+              type="checkbox"
+              name="friendsListPublic"
+              checked={friendsListPublic}
+              onChange={(e) => setFriendsListPublic(e.target.checked)}
+            />
             Show my friends list on my profile
           </label>
           <div className="g-row" style={{ justifyContent: "flex-end" }}>
-            <button className="g-btn g-btn--primary" onClick={() => void save()} disabled={busy || !displayName.trim()}>
+            <button type="submit" className="g-btn g-btn--primary" disabled={busy || !displayName.trim()}>
               Save changes
             </button>
           </div>
         </div>
-      </div>
+      </form>
 
       <PasswordChange />
 
@@ -342,7 +381,7 @@ export function SettingsPage() {
           <DeleteAccountButton />
         </div>
       </div>
-    </main>
+    </section>
   );
 }
 

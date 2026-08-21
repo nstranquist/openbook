@@ -23,11 +23,12 @@ function CreateGroup() {
     });
   }
   return (
-    <form className="ob-card ob-stack ob-form" onSubmit={submit}>
-      <h2 className="ob-form-title">Create a group or page</h2>
+    <form className="ob-card ob-stack ob-form" aria-labelledby="create-group-title" onSubmit={submit}>
+      <h2 id="create-group-title" className="ob-form-title">Create a group or page</h2>
       <Field label="Name">
         <input
           className="g-input"
+          name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={80}
@@ -37,6 +38,7 @@ function CreateGroup() {
       <Field label="Description" hint="Optional. Add up to 500 characters.">
         <textarea
           className="g-textarea"
+          name="description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           maxLength={500}
@@ -45,6 +47,7 @@ function CreateGroup() {
       <Field label="Type">
         <select
           className="g-select"
+          name="kind"
           value={kind}
           onChange={(e) => setKind(e.target.value as "group" | "page")}
         >

@@ -48,7 +48,9 @@ function FriendButton({
   );
   const dmButton = (
     <button
+      type="button"
       className="ob-btn"
+      aria-label="Message"
       onClick={() =>
         void runOrToast(openDm({ userId }), "Could not open messages").then((conversationId) => {
           if (conversationId) navigate(`/messages/${conversationId}`);
@@ -180,12 +182,18 @@ function EditProfile({ profile, onDone }: { profile: { displayName: string; bio?
       {multiline ? (
         <textarea
           className="g-textarea"
+          name={key}
+          maxLength={500}
           value={form[key]}
           onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         />
       ) : (
         <input
           className="g-input"
+          name={key}
+          autoComplete={key === "displayName" ? "name" : key === "work" ? "organization" : key === "location" ? "address-level2" : undefined}
+          maxLength={key === "displayName" ? 80 : 500}
+          required={key === "displayName"}
           value={form[key]}
           onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         />
@@ -193,8 +201,8 @@ function EditProfile({ profile, onDone }: { profile: { displayName: string; bio?
     </Field>
   );
   return (
-    <form className="ob-card ob-reveal ob-form" onSubmit={(event) => void save(event)}>
-      <h2 className="ob-form-title">Edit profile</h2>
+    <form className="ob-card ob-reveal ob-form" aria-labelledby="edit-profile-title" onSubmit={(event) => void save(event)}>
+      <h2 id="edit-profile-title" className="ob-form-title">Edit profile</h2>
       {field("displayName", "Name")}
       {field("bio", "Bio", true)}
       {field("work", "Work")}

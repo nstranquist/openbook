@@ -260,6 +260,14 @@ export function TopNav() {
             </span>
           )}
         </NavLink>
+        <NavLink
+          to="/saved"
+          className={({ isActive }) => `ob-tab${isActive ? " active" : ""}`}
+          title="Saved"
+          aria-label="Saved"
+        >
+          🔖
+        </NavLink>
       </nav>
       <div className="ob-nav-right">
         <ThemeToggle />

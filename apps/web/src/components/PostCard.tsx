@@ -137,6 +137,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
               </Link>
               {editingId === c._id ? (
                 <form
+                  aria-label="Edit comment"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void runOrToast(editComment({ id: c._id, body: editBody }), "Could not edit").then((ok) => {
@@ -192,7 +193,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
         </button>
       )}
       {me && (
-        <form className="ob-comment" onSubmit={submit}>
+        <form className="ob-comment" aria-label="Add a comment" onSubmit={submit}>
           <Avatar name={me.displayName} hue={me.avatarHue} size={32} />
           <input
             className="ob-comment-input"

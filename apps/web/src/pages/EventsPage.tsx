@@ -28,11 +28,12 @@ export function EventsPage() {
   return (
     <div className="ob-stack" style={{ maxWidth: 680, margin: "16px auto" }}>
       <h1>Events</h1>
-      <form className="ob-card ob-stack ob-form" onSubmit={submit}>
-        <h2 className="ob-form-title">Create an event</h2>
+      <form className="ob-card ob-stack ob-form" aria-labelledby="create-event-title" onSubmit={submit}>
+        <h2 id="create-event-title" className="ob-form-title">Create an event</h2>
         <Field label="Event title">
           <input
             className="g-input"
+            name="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={120}
@@ -42,6 +43,7 @@ export function EventsPage() {
         <Field label="Description" hint="Optional. Add up to 1,000 characters.">
           <textarea
             className="g-textarea"
+            name="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={1000}
@@ -50,6 +52,7 @@ export function EventsPage() {
         <Field label="Start time">
           <input
             className="g-input"
+            name="startAt"
             type="datetime-local"
             value={startLocal}
             onChange={(e) => setStartLocal(e.target.value)}

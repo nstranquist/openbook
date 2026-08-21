@@ -20,7 +20,7 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 function ClosedAccount() {
   const { signOut } = useAuth();
   return (
-    <div className="ob-landing">
+    <main id="main-content" className="ob-landing" tabIndex={-1}>
       <div className="ob-card ob-empty-cta" style={{ maxWidth: 420 }}>
         <p className="ob-bold" style={{ fontSize: 17 }}>This account is closed</p>
         <p className="ob-muted ob-small">Sign out to create a new one.</p>
@@ -28,7 +28,7 @@ function ClosedAccount() {
           Sign out
         </button>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -67,22 +67,24 @@ export function App() {
 
   if (isLoading) {
     return (
-      <div className="ob-landing" aria-busy="true" aria-live="polite">
+      <main id="main-content" className="ob-landing" aria-busy="true" aria-live="polite">
         <div className="ob-landing-brand ob-landing-loading">
           <img src="/openbook.svg" width={56} height={56} alt="" className="ob-brand-mark" />
           <h1>openbook</h1>
           <p className="ob-muted">Loading…</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <Routes>
-        <Route path="/status" element={<StatusPage />} />
-        <Route path="*" element={<SignIn />} />
-      </Routes>
+      <main id="main-content" tabIndex={-1}>
+        <Routes>
+          <Route path="/status" element={<StatusPage />} />
+          <Route path="*" element={<SignIn />} />
+        </Routes>
+      </main>
     );
   }
 

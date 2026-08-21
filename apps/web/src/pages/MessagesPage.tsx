@@ -86,6 +86,7 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
           <div key={m._id} className={`ob-msg ${m.isMine ? "mine" : "theirs"}`} title={timeAgo(m.createdAt)}>
             {editingId === m._id ? (
               <form
+                aria-label="Edit message"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void runOrToast(editMessage({ id: m._id, body: editBody }), "Could not edit").then((ok) => {
@@ -135,7 +136,7 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
           <div className="ob-empty">Say hi 👋</div>
         )}
       </div>
-      <form className="ob-msg-compose" onSubmit={submit}>
+      <form className="ob-msg-compose" aria-label="Send a message" onSubmit={submit}>
         <input
           className="ob-comment-input"
           placeholder="Aa"

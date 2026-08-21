@@ -18,18 +18,20 @@ full-stack review, not a Meta clone.
 1. Sign up, verify email when mail is configured, and keep a profile.
 2. Post text, a photo, or a video to public or friends, including in a group.
 3. Find people, become friends, mute, block, and report.
-4. Comment, react, and get notified in-app and by email when mail is set.
-5. Message friends with edit, hide, and last-read receipts.
-6. Share a 24-hour story, create a group or page, and RSVP to an event.
-7. Close the account and have sessions, files, and Stripe follow.
+4. Comment, react, save a post, and review all notifications.
+5. Message friends with typing state, edit, hide, and last-read receipts.
+6. Share a 24-hour story, create an album, create a group or page, and RSVP.
+7. Use the same product through the PWA, desktop shell, or mobile shell.
+8. Close the account and have sessions, files, saved rows, and Stripe follow.
 
 ## In scope now
 
 Server-enforced visibility, pair occupancy, mute vs block, reports with
 an operator queue, paginated comments, searchable posts and messages,
-owned uploads with EXIF strip on the client, hourly GC, password change
-while signed in, PWA install, web push when VAPID keys are set, a public
-status page, and a backup script.
+owned uploads with EXIF strip on the client, hourly GC, private saved posts,
+paginated notifications, link previews, presence, password change while
+signed in, PWA install, web push when VAPID keys are set, a public status
+page, and a backup script.
 
 ## Out of scope
 
@@ -38,6 +40,8 @@ hosted Openbook service. Treating the unit suite as load proof.
 
 ## Acceptance
 
-`pnpm test` and `pnpm typecheck` are green. `scripts/verify-live.mjs`
-covers block, comments pagination, mute, groups, and image upload
-against a live backend. `docs/BACKLOG.md` lists only what is still out.
+`pnpm test`, `pnpm typecheck`, and `pnpm build` are green.
+`scripts/verify-live.mjs` covers the server contract against a real backend.
+`scripts/verify-ui.mjs` covers the desktop and mobile browser contracts.
+Expo Doctor and both native bundle exports pass. `docs/BACKLOG.md` lists only
+operator work and time-bound maintenance gates.
