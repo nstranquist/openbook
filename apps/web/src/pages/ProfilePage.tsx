@@ -3,6 +3,7 @@ import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { runOrToast } from "../lib/run";
+import { stripImageMetadata, uploadStorageFile } from "../lib/media";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
@@ -213,6 +214,8 @@ function AboutCard({ profile }: { profile: { bio?: string; work?: string; locati
 function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
   const albums = useQuery(api.albums.listMine, { userId });
   const create = useMutation(api.albums.create);
+  const addPhoto = useMutation(api.albums.addPhoto);
+  const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
   return (
     <div className="ob-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <span className="ob-bold" style={{ fontSize: 17 }}>Albums</span>
@@ -238,10 +241,30 @@ function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
             ) : (
               <div style={{ width: 48, height: 48, background: "var(--border)", borderRadius: 8 }} />
             )}
-            <span>
+            <span className="ob-grow">
               <span className="ob-bold">{a.title}</span>
               <div className="ob-muted ob-small">{a.itemCount} photos</div>
             </span>
+            {isMe && (
+              <label className="ob-btn">
+                Add photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    void (async () => {
+                      const prepared = new File([await stripImageMetadata(file)], file.name, { type: file.type });
+                      const imageId = await uploadStorageFile(prepared, generateUploadUrl);
+                      await runOrToast(addPhoto({ albumId: a._id, imageId }), "Could not add photo");
+                    })();
+                  }}
+                />
+              </label>
+            )}
           </div>
         ))
       )}
