@@ -3,8 +3,8 @@
 // Unlike `pnpm test` (convex-test simulates the backend) and `tsc` (types only),
 // this drives the ACTUAL deployed functions over the wire, as three users:
 // sign-up → people search → friend request → accept → posts (public+friends) →
-// feed visibility → reactions → comments → notifications → DM round-trip with
-// unread accounting → delete cascade → billing plan gate readout.
+// feed visibility → saved posts → reactions → comments → notifications → DM
+// round-trip with unread accounting → delete cascade → billing plan readout.
 //
 //   CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3310 node scripts/verify-live.mjs   # self-hosted (dev-selfhost.sh)
 //   VITE_CONVEX_URL=https://<your>.convex.cloud   node scripts/verify-live.mjs   # cloud dev/prod
@@ -107,6 +107,22 @@ async function main() {
   }
   check("stranger cannot react to a friends-only post", strangerReactRejected);
 
+  const bobPostBeforeSave = await bob.client.query(fn("posts:get"), { id: friendsPostId });
+  check("visible post starts unsaved", bobPostBeforeSave?.isSaved === false);
+  check("friend can save a visible post",
+    (await bob.client.mutation(fn("saved:toggle"), { postId: friendsPostId })) === true);
+  const bobSaved = await bob.client.query(fn("saved:list"), { paginationOpts: PAGE });
+  check("saved list is private and returns the post",
+    bobSaved.page.some((saved) => saved._id === friendsPostId) &&
+      (await alice.client.query(fn("saved:list"), { paginationOpts: PAGE })).page.length === 0);
+  let hiddenSaveRejected = false;
+  try {
+    await mallory.client.mutation(fn("saved:toggle"), { postId: friendsPostId });
+  } catch {
+    hiddenSaveRejected = true;
+  }
+  check("stranger cannot save a friends-only post", hiddenSaveRejected);
+
   await alice.client.mutation(fn("blocks:set"), { userId: mallory.userId, blocked: true });
   const malloryAfterBlock = await mallory.client.query(fn("posts:get"), { id: friendsPostId });
   check("block hides the author's friends-only post", malloryAfterBlock === null);
@@ -167,6 +183,12 @@ async function main() {
   const aliceNotifs = await alice.client.query(fn("notifications:list"), {});
   check("Alice notified of reaction + comment",
     aliceNotifs.some((n) => n.kind === "reaction") && aliceNotifs.some((n) => n.kind === "comment"));
+  const aliceNotifPage = await alice.client.query(fn("notifications:listPage"), {
+    paginationOpts: PAGE,
+  });
+  check("notification page reads the same recipient-scoped events",
+    aliceNotifPage.page.some((n) => n.kind === "reaction") &&
+      aliceNotifPage.page.some((n) => n.kind === "comment"));
   await alice.client.mutation(fn("notifications:markAllRead"), {});
   check("mark-all-read clears the bell",
     (await alice.client.query(fn("notifications:unreadCount"), {})) === 0);
@@ -196,6 +218,9 @@ async function main() {
   const afterDelete = await bob.client.query(fn("posts:feed"), { paginationOpts: PAGE });
   check("deleted post leaves every feed",
     !afterDelete.page.some((p) => p._id === friendsPostId));
+  check("deleted post leaves saved lists",
+    !(await bob.client.query(fn("saved:list"), { paginationOpts: PAGE })).page
+      .some((saved) => saved._id === friendsPostId));
 
   // 9) Billing spine still reports the plan + usage (posts gate).
   const plan = await alice.client.query(fn("billing:getMyPlan"), {});

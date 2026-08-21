@@ -93,7 +93,13 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
                   });
                 }}
               >
-                <input className="ob-comment-input" value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+                <input
+                  className="ob-comment-input"
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  aria-label="Edit message"
+                  autoFocus
+                />
               </form>
             ) : (
               m.body

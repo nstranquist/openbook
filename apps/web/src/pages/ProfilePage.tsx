@@ -1,11 +1,12 @@
 import { api, profileInput, type Id } from "@openbook/shared";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { runOrToast } from "../lib/run";
 import { stripImageMetadata, uploadStorageFile } from "../lib/media";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
+import { Field } from "../components/Field";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
 import { joinedLabel } from "../lib/format";
 
@@ -159,7 +160,8 @@ function EditProfile({ profile, onDone }: { profile: { displayName: string; bio?
   });
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
+  async function save(event?: FormEvent) {
+    event?.preventDefault();
     const parsed = profileInput.safeParse(form);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Invalid profile");
@@ -173,29 +175,36 @@ function EditProfile({ profile, onDone }: { profile: { displayName: string; bio?
     }
   }
 
-  const field = (key: keyof typeof form, label: string) => (
-    <div className="g-field">
-      <label className="g-label">{label}</label>
-      <input
-        className="g-input"
-        value={form[key]}
-        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-      />
-    </div>
+  const field = (key: keyof typeof form, label: string, multiline = false) => (
+    <Field label={label}>
+      {multiline ? (
+        <textarea
+          className="g-textarea"
+          value={form[key]}
+          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+        />
+      ) : (
+        <input
+          className="g-input"
+          value={form[key]}
+          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+        />
+      )}
+    </Field>
   );
   return (
-    <div className="ob-card ob-reveal" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <span className="ob-bold" style={{ fontSize: 17 }}>Edit profile</span>
+    <form className="ob-card ob-reveal ob-form" onSubmit={(event) => void save(event)}>
+      <h2 className="ob-form-title">Edit profile</h2>
       {field("displayName", "Name")}
-      {field("bio", "Bio")}
+      {field("bio", "Bio", true)}
       {field("work", "Work")}
       {field("location", "Location")}
-      {error && <div className="ob-small" style={{ color: "var(--danger)" }}>{error}</div>}
+      {error && <div className="g-error-text" role="alert">{error}</div>}
       <span className="ob-row" style={{ gap: 8 }}>
-        <button className="ob-btn ob-btn--primary" onClick={() => void save()}>Save</button>
-        <button className="ob-btn" onClick={onDone}>Cancel</button>
+        <button type="submit" className="ob-btn ob-btn--primary">Save</button>
+        <button type="button" className="ob-btn" onClick={onDone}>Cancel</button>
       </span>
-    </div>
+    </form>
   );
 }
 

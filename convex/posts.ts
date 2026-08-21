@@ -26,6 +26,7 @@ import {
   assertImage,
   assertVideo,
   claimUpload,
+  deleteOwnedUpload,
   registerOwnedUpload,
 } from "./lib/uploads";
 
@@ -288,8 +289,14 @@ export const remove = mutation({
     if (!post) return;
     if (post.authorId !== userId)
       throw new Error("Only the author can delete a post");
-    if (post.imageId) await ctx.storage.delete(post.imageId);
-    if (post.videoId) await ctx.storage.delete(post.videoId);
+    const mediaIds = [
+      ...(post.imageIds ?? []),
+      ...(post.imageId ? [post.imageId] : []),
+      ...(post.videoId ? [post.videoId] : []),
+    ];
+    for (const storageId of new Set(mediaIds)) {
+      await deleteOwnedUpload(ctx, userId, storageId);
+    }
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", id))
@@ -307,6 +314,11 @@ export const remove = mutation({
     for (const n of notifications) {
       if (n.postId === id) await ctx.db.delete(n._id);
     }
+    const saves = await ctx.db
+      .query("savedPosts")
+      .withIndex("by_post", (q) => q.eq("postId", id))
+      .collect();
+    for (const save of saves) await ctx.db.delete(save._id);
     await ctx.db.delete(id);
   },
 });

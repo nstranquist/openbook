@@ -12,35 +12,6 @@ import { MAX_IMAGE_BYTES, stripImageMetadata, uploadStorageFile } from "../lib/m
 // center = composer + the paginated reactive feed, right rail = contacts
 // (click → DM) and People You May Know.
 
-function LeftRail() {
-  const me = useQuery(api.profiles.me);
-  if (!me) return <div />;
-  return (
-    <div className="ob-rail ob-rail-left">
-      <Link to={`/profile/${me.userId}`} className="ob-menu-item ob-card" style={{ padding: 10 }}>
-        <Avatar name={me.displayName} hue={me.avatarHue} size={36} />
-        <span className="ob-bold">{me.displayName}</span>
-      </Link>
-      <Link to="/friends" className="ob-menu-item">
-        <span className="ob-iconbtn" style={{ fontSize: 18 }}>👥</span>
-        <span className="ob-bold">Friends</span>
-      </Link>
-      <Link to="/messages" className="ob-menu-item">
-        <span className="ob-iconbtn" style={{ fontSize: 18 }}>💬</span>
-        <span className="ob-bold">Messages</span>
-      </Link>
-      <Link to="/groups" className="ob-menu-item">
-        <span className="ob-iconbtn" style={{ fontSize: 18 }}>⬡</span>
-        <span className="ob-bold">Groups</span>
-      </Link>
-      <Link to="/events" className="ob-menu-item">
-        <span className="ob-iconbtn" style={{ fontSize: 18 }}>📅</span>
-        <span className="ob-bold">Events</span>
-      </Link>
-    </div>
-  );
-}
-
 function RightRail() {
   const friends = useQuery(api.friends.list, {});
   const suggestions = useQuery(api.friends.suggestions);
@@ -134,7 +105,12 @@ function StoriesStrip() {
           onChange={(e) => setDraft(e.target.value)}
           aria-label="Story text"
         />
-        <select className="ob-select" value={audience} onChange={(e) => setAudience(e.target.value as "public" | "friends")}>
+        <select
+          className="ob-select"
+          value={audience}
+          onChange={(e) => setAudience(e.target.value as "public" | "friends")}
+          aria-label="Who can see this story"
+        >
           <option value="friends">Friends</option>
           <option value="public">Public</option>
         </select>
@@ -213,7 +189,6 @@ export function FeedPage() {
     (results.length === 0 && status !== "Exhausted");
   return (
     <div className="ob-grid">
-      <LeftRail />
       <div className="ob-stack">
         <StoriesStrip />
         <Composer />

@@ -77,3 +77,18 @@ export async function claimUpload(
   }
   await ctx.db.patch(upload._id, { used: true });
 }
+
+export async function deleteOwnedUpload(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  storageId: Id<"_storage">,
+): Promise<void> {
+  const uploads = await ctx.db
+    .query("uploads")
+    .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+    .collect();
+  for (const upload of uploads) {
+    if (upload.userId === userId) await ctx.db.delete(upload._id);
+  }
+  await ctx.storage.delete(storageId).catch(() => undefined);
+}

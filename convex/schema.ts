@@ -113,6 +113,17 @@ export default defineSchema({
     .index("by_post_user", ["postId", "userId"])
     .index("by_user", ["userId"]),
 
+  // A private reading list. One row per viewer and post. The post visibility
+  // policy still applies when the list is read.
+  savedPosts: defineTable({
+    userId: v.id("users"),
+    postId: v.id("posts"),
+    createdAt: v.number(),
+  })
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_user_post", ["userId", "postId"])
+    .index("by_post", ["postId"]),
+
   // Friend graph. One row per pair for the whole lifecycle:
   // pending (requester → addressee) then accepted. Declining deletes the row.
   // pairKey = sorted ids joined ":" — the uniqueness handle for the pair.

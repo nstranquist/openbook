@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { deleteOwnedUpload } from "./lib/uploads";
 import {
   areFriends,
   blockedPairIds,
@@ -258,9 +259,27 @@ export const deleteAccount = mutation({
       for (const n of notifs) {
         if (n.postId === post._id) await ctx.db.delete(n._id);
       }
-      if (post.imageId) await ctx.storage.delete(post.imageId);
+      const saves = await ctx.db
+        .query("savedPosts")
+        .withIndex("by_post", (q) => q.eq("postId", post._id))
+        .collect();
+      for (const save of saves) await ctx.db.delete(save._id);
+      const mediaIds = [
+        ...(post.imageIds ?? []),
+        ...(post.imageId ? [post.imageId] : []),
+        ...(post.videoId ? [post.videoId] : []),
+      ];
+      for (const storageId of new Set(mediaIds)) {
+        await deleteOwnedUpload(ctx, me, storageId);
+      }
       await ctx.db.delete(post._id);
     }
+
+    const mySavedPosts = await ctx.db
+      .query("savedPosts")
+      .withIndex("by_user_created", (q) => q.eq("userId", me))
+      .collect();
+    for (const save of mySavedPosts) await ctx.db.delete(save._id);
 
     const myComments = await ctx.db
       .query("comments")

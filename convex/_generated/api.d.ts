@@ -37,6 +37,7 @@ import type * as push from "../push.js";
 import type * as pushSend from "../pushSend.js";
 import type * as reactions from "../reactions.js";
 import type * as reports from "../reports.js";
+import type * as saved from "../saved.js";
 import type * as stories from "../stories.js";
 
 import type {
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   pushSend: typeof pushSend;
   reactions: typeof reactions;
   reports: typeof reports;
+  saved: typeof saved;
   stories: typeof stories;
 }>;
 

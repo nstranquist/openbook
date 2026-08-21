@@ -871,3 +871,44 @@ describe("friend notification cleanup", () => {
     expect(await alice.as.query(api.notifications.unreadCount, {})).toBe(0);
   });
 });
+
+describe("saved posts", () => {
+  it("keeps a private, visibility-filtered reading list", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const mallory = await actor(t, "Mallory");
+    const publicPost = await alice.as.mutation(api.posts.create, {
+      body: "save this", audience: "public",
+    });
+    const friendsPost = await alice.as.mutation(api.posts.create, {
+      body: "friends only", audience: "friends",
+    });
+
+    expect((await bob.as.query(api.posts.get, { id: publicPost }))?.isSaved).toBe(false);
+    expect(await bob.as.mutation(api.saved.toggle, { postId: publicPost })).toBe(true);
+    expect((await bob.as.query(api.posts.get, { id: publicPost }))?.isSaved).toBe(true);
+    const bobSaved = await bob.as.query(api.saved.list, { paginationOpts: firstPage });
+    expect(bobSaved.page.map((post: any) => post._id)).toEqual([publicPost]);
+    expect((await alice.as.query(api.saved.list, { paginationOpts: firstPage })).page).toEqual([]);
+    await expect(
+      mallory.as.mutation(api.saved.toggle, { postId: friendsPost }),
+    ).rejects.toThrow(/post not found/i);
+
+    expect(await bob.as.mutation(api.saved.toggle, { postId: publicPost })).toBe(false);
+    expect((await bob.as.query(api.saved.list, { paginationOpts: firstPage })).page).toEqual([]);
+  });
+
+  it("removes saved rows when their post is deleted", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "temporary", audience: "public",
+    });
+    await bob.as.mutation(api.saved.toggle, { postId });
+    await alice.as.mutation(api.posts.remove, { id: postId });
+    const rows = await t.run(async (ctx) => ctx.db.query("savedPosts").collect());
+    expect(rows).toEqual([]);
+  });
+});

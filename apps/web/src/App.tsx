@@ -1,9 +1,10 @@
 import { api, useAuth, useSession } from "@openbook/shared";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SignIn } from "./components/SignIn";
 import { TopNav } from "./components/TopNav";
+import { LeftNav } from "./components/LeftNav";
 import { FeedPage } from "./pages/FeedPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { MessagesPage } from "./pages/MessagesPage";
@@ -13,6 +14,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { GroupsPage } from "./pages/GroupsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { StatusPage } from "./pages/StatusPage";
+import { SavedPage } from "./pages/SavedPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 
 function ClosedAccount() {
   const { signOut } = useAuth();
@@ -51,6 +54,14 @@ function EnsureProfile({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RouteFocus() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.querySelector<HTMLElement>("#main-content")?.focus();
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   const { isAuthenticated, isLoading } = useSession();
 
@@ -78,21 +89,30 @@ export function App() {
   return (
     <EnsureProfile>
       <div className="ob-shell">
+        <a className="ob-skip-link" href="#main-content">Skip to content</a>
         <TopNav />
-        <Routes>
-          <Route path="/" element={<FeedPage />} />
-          <Route path="/friends" element={<FriendsPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
-          <Route path="/messages/:conversationId" element={<MessagesPage />} />
-          <Route path="/profile/:userId" element={<ProfilePage />} />
-          <Route path="/post/:postId" element={<PostPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/groups" element={<GroupsPage />} />
-          <Route path="/groups/:groupId" element={<GroupsPage />} />
-          <Route path="/events" element={<EventsPage />} />
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <div className="ob-body">
+          <LeftNav />
+          <main id="main-content" className="ob-main" tabIndex={-1}>
+            <RouteFocus />
+            <Routes>
+              <Route path="/" element={<FeedPage />} />
+              <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/messages/:conversationId" element={<MessagesPage />} />
+              <Route path="/profile/:userId" element={<ProfilePage />} />
+              <Route path="/post/:postId" element={<PostPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/groups" element={<GroupsPage />} />
+              <Route path="/groups/:groupId" element={<GroupsPage />} />
+              <Route path="/events" element={<EventsPage />} />
+              <Route path="/saved" element={<SavedPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/status" element={<StatusPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+        </div>
       </div>
     </EnsureProfile>
   );

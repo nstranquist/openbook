@@ -5,7 +5,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { ThemeToggle } from "../ui/garrid";
 import { Avatar } from "./Avatar";
 import { BrandMark } from "./BrandMark";
-import { timeAgo } from "../lib/format";
+import { NotificationItem } from "./NotificationItem";
 
 // The fixed top bar: brand, live people search, section tabs with realtime
 // unread badges, the notifications bell, and the account menu. All badges are
@@ -97,19 +97,11 @@ function SearchBox() {
   );
 }
 
-const NOTIF_TEXT: Record<string, string> = {
-  friend_request: "sent you a friend request",
-  friend_accept: "accepted your friend request",
-  reaction: "reacted to your post",
-  comment: "commented on your post",
-};
-
 function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const unread = useQuery(api.notifications.unreadCount) ?? 0;
   const items = useQuery(api.notifications.list, open ? {} : "skip");
   const markAllRead = useMutation(api.notifications.markAllRead);
-  const markRead = useMutation(api.notifications.markRead);
   const ref = useClickOutside(() => setOpen(false));
   const navigate = useNavigate();
   return (
@@ -137,27 +129,24 @@ function NotificationsBell() {
           ) : items.length === 0 ? (
             <div className="ob-empty ob-small">No notifications yet.</div>
           ) : (
-            items.map((n) => (
-              <button
-                key={n._id}
-                className={`ob-menu-item${n.read ? "" : " unread"}`}
-                onClick={() => {
-                  void markRead({ id: n._id });
-                  setOpen(false);
-                  if (n.postId) navigate(`/post/${n.postId}`);
-                  else if (n.kind === "friend_request") navigate("/friends");
-                  else navigate(`/profile/${n.actor.userId}`);
-                }}
-              >
-                <Avatar name={n.actor.displayName} hue={n.actor.avatarHue} size={36} />
-                <span className="ob-grow">
-                  <span className="ob-bold">{n.actor.displayName}</span>{" "}
-                  {NOTIF_TEXT[n.kind] ?? n.kind}
-                  <span className="ob-muted ob-small"> · {timeAgo(n.createdAt)}</span>
-                </span>
-              </button>
+            items.map((notification) => (
+              <NotificationItem
+                key={notification._id}
+                notification={notification}
+                onActivate={() => setOpen(false)}
+              />
             ))
           )}
+          <button
+            type="button"
+            className="ob-menu-item ob-menu-footer"
+            onClick={() => {
+              setOpen(false);
+              navigate("/notifications");
+            }}
+          >
+            View all notifications
+          </button>
         </div>
       )}
     </div>

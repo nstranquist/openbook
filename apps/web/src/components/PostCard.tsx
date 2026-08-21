@@ -32,6 +32,7 @@ interface EnrichedPost {
   reactionTotal: number;
   author: { userId: string; displayName: string; avatarHue: number };
   myReaction: ReactionKind | null;
+  isSaved: boolean;
   linkPreview?: {
     url: string;
     title?: string;
@@ -143,7 +144,13 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
                     });
                   }}
                 >
-                  <input className="ob-comment-input" value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+                  <input
+                    className="ob-comment-input"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    aria-label="Edit comment"
+                    autoFocus
+                  />
                 </form>
               ) : (
                 <div>{c.body}</div>
@@ -202,6 +209,7 @@ function Comments({ postId }: { postId: Id<"posts"> }) {
 
 export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean }) {
   const toggleReaction = useMutation(api.reactions.toggle);
+  const toggleSaved = useMutation(api.saved.toggle);
   const removePost = useMutation(api.posts.remove);
   const [showComments, setShowComments] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -440,6 +448,19 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
           aria-expanded={showComments}
         >
           <span aria-hidden="true">💬</span> Comment
+        </button>
+        <button
+          type="button"
+          className={`ob-action${post.isSaved ? " reacted" : ""}`}
+          aria-pressed={post.isSaved}
+          onClick={() =>
+            void runOrToast(
+              toggleSaved({ postId: post._id }),
+              "Could not update saved posts",
+            )
+          }
+        >
+          <span aria-hidden="true">🔖</span> {post.isSaved ? "Saved" : "Save"}
         </button>
         {!isMine && (
           <ReportButton postId={post._id} />

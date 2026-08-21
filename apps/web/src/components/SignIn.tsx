@@ -1,6 +1,7 @@
 import { useAuth } from "@openbook/shared";
 import { type FormEvent, useRef, useState } from "react";
 import { BrandMark } from "./BrandMark";
+import { Field } from "./Field";
 import { devIdentity, isDevLoginAvailable, useDevAutoLogin } from "../lib/devAutoLogin";
 import { clearSavedLogin, loadSavedLogin, saveLogin } from "../lib/savedLogin";
 
@@ -17,6 +18,7 @@ export function SignIn() {
   const [remember, setRemember] = useState(saved !== null);
   const [flow, setFlow] = useState<"signIn" | "signUp" | "reset" | "resetVerify">("signIn");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<"form" | "dev" | "oauth" | false>(false);
   const autoLogin = useDevAutoLogin();
   const dev = devIdentity();
@@ -24,6 +26,7 @@ export function SignIn() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setBusy("form");
     try {
       if (flow === "signUp") {
@@ -36,7 +39,7 @@ export function SignIn() {
       } else if (flow === "reset") {
         await requestPasswordReset(email);
         setFlow("resetVerify");
-        setError("If that account exists, we sent a reset code.");
+        setNotice("If that account exists, we sent a reset code.");
         setBusy(false);
         return;
       } else if (flow === "resetVerify") {
@@ -125,66 +128,78 @@ export function SignIn() {
                 : "Enter reset code"}
         </h2>
         {flow === "signUp" && (
-          <input
-            className="g-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Full name"
-            aria-label="Full name"
-            autoComplete="name"
-            disabled={busy !== false}
-          />
+          <Field label="Full name">
+            <input
+              className="g-input"
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+              disabled={busy !== false}
+              required
+            />
+          </Field>
         )}
-        <input
-          className="g-input"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          type="email"
-          aria-label="Email"
-          autoComplete="email"
-          disabled={busy !== false}
-          required
-        />
-        {flow === "resetVerify" && (
+        <Field label="Email address">
           <input
             className="g-input"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Reset code"
-            aria-label="Reset code"
+            name="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            autoComplete="email"
             disabled={busy !== false}
             required
           />
+        </Field>
+        {flow === "resetVerify" && (
+          <Field label="Reset code">
+            <input
+              className="g-input"
+              name="code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              disabled={busy !== false}
+              required
+            />
+          </Field>
         )}
         {flow !== "reset" && (
-          <input
-            className="g-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={flow === "resetVerify" ? "New password" : "Password"}
-            type="password"
-            aria-label={flow === "resetVerify" ? "New password" : "Password"}
-            autoComplete={flow === "signIn" ? "current-password" : "new-password"}
-            disabled={busy !== false}
-            required
-            minLength={8}
-          />
+          <Field
+            label={flow === "resetVerify" ? "New password" : "Password"}
+            hint={flow === "signIn" ? undefined : "Use at least 8 characters."}
+          >
+            <input
+              className="g-input"
+              name="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              autoComplete={flow === "signIn" ? "current-password" : "new-password"}
+              disabled={busy !== false}
+              required
+              minLength={8}
+            />
+          </Field>
         )}
         {flow === "signIn" && (
           <button
             type="button"
             className="ob-link ob-small"
             style={{ alignSelf: "flex-start", background: "none", border: 0, padding: 0, cursor: "pointer" }}
-            onClick={() => { setFlow("reset"); setError(null); }}
+            onClick={() => { setFlow("reset"); setError(null); setNotice(null); }}
           >
             Forgot password?
           </button>
         )}
-        <label className="ob-small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy !== false} />
-          <span>Remember my email on this device</span>
-        </label>
+        {(flow === "signIn" || flow === "signUp") && (
+          <label className="ob-small ob-check-row">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={busy !== false} />
+            <span>Remember my email on this device</span>
+          </label>
+        )}
         <button
           type="submit"
           className="ob-btn ob-btn--primary ob-auth-submit"
@@ -249,6 +264,7 @@ export function SignIn() {
             {error ?? autoLogin.error}
           </div>
         )}
+        {notice && <div className="ob-small ob-auth-notice" role="status">{notice}</div>}
         <hr className="ob-divider" />
         <button
           type="button"
@@ -257,6 +273,7 @@ export function SignIn() {
           onClick={() => {
             setFlow(flow === "signUp" || flow === "reset" || flow === "resetVerify" ? "signIn" : "signUp");
             setError(null);
+            setNotice(null);
           }}
         >
           {flow === "signIn" ? "Create new account" : "Already have an account?"}

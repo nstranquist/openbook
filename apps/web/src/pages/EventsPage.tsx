@@ -1,6 +1,7 @@
 import { api } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
+import { Field } from "../components/Field";
 import { runOrToast } from "../lib/run";
 
 export function EventsPage() {
@@ -11,36 +12,52 @@ export function EventsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startLocal, setStartLocal] = useState("");
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const startAt = new Date(startLocal).getTime();
+    void runOrToast(
+      create({ title, description, startAt }),
+      "Could not create",
+    ).then((id) => {
+      if (!id) return;
+      setTitle("");
+      setDescription("");
+      setStartLocal("");
+    });
+  }
   return (
     <div className="ob-stack" style={{ maxWidth: 680, margin: "16px auto" }}>
       <h1>Events</h1>
-      <div className="ob-card ob-stack" style={{ gap: 8 }}>
-        <input className="g-input" placeholder="Event title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <textarea className="g-textarea" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-        <input
-          className="g-input"
-          type="datetime-local"
-          value={startLocal}
-          onChange={(e) => setStartLocal(e.target.value)}
-          aria-label="Start time"
-        />
-        <button
-          className="ob-btn ob-btn--primary"
-          onClick={() => {
-            const startAt = startLocal ? new Date(startLocal).getTime() : Date.now() + 86400000;
-            void runOrToast(
-              create({ title, description, startAt }),
-              "Could not create",
-            ).then(() => {
-              setTitle("");
-              setDescription("");
-              setStartLocal("");
-            });
-          }}
-        >
-          Create
-        </button>
-      </div>
+      <form className="ob-card ob-stack ob-form" onSubmit={submit}>
+        <h2 className="ob-form-title">Create an event</h2>
+        <Field label="Event title">
+          <input
+            className="g-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={120}
+            required
+          />
+        </Field>
+        <Field label="Description" hint="Optional. Add up to 1,000 characters.">
+          <textarea
+            className="g-textarea"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={1000}
+          />
+        </Field>
+        <Field label="Start time">
+          <input
+            className="g-input"
+            type="datetime-local"
+            value={startLocal}
+            onChange={(e) => setStartLocal(e.target.value)}
+            required
+          />
+        </Field>
+        <button type="submit" className="ob-btn ob-btn--primary">Create event</button>
+      </form>
       {events.map((e) => (
         <div key={e._id} className="ob-card">
           <div className="ob-bold">{e.title}</div>

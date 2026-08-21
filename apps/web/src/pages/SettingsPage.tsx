@@ -1,9 +1,10 @@
 import { api, useAuth, type Id } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ThemeToggle, toast } from "../ui/garrid";
 import { Avatar } from "../components/Avatar";
 import { BillingPanel } from "../components/BillingPanel";
+import { Field } from "../components/Field";
 import { runOrToast } from "../lib/run";
 import { subscribePush, unsubscribePush } from "../lib/push";
 
@@ -61,32 +62,59 @@ function PasswordChange() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  if (!me?.email) return null;
+  const email = me?.email;
+  if (!email) return null;
+  const accountEmail = email;
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    void changePassword(accountEmail, currentPassword, nextPassword)
+      .then(() => {
+        toast("Password updated", "ok");
+        setCurrentPassword("");
+        setNextPassword("");
+      })
+      .catch((error) =>
+        toast(error instanceof Error ? error.message : "Could not change password", "err"),
+      )
+      .finally(() => setBusy(false));
+  }
   return (
     <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
       <div className="g-card-title">Password</div>
       <div className="g-hint">Change your password while signed in. Social-login accounts skip this.</div>
-      <div className="g-stack" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)" }}>
-        <input className="g-input" type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-        <input className="g-input" type="password" placeholder="New password (8+ characters)" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} />
+      <form className="g-stack ob-form" style={{ marginTop: "var(--space-3)" }} onSubmit={submit}>
+        <Field label="Current password">
+          <input
+            className="g-input"
+            name="current-password"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="New password" hint="Use at least 8 characters.">
+          <input
+            className="g-input"
+            name="new-password"
+            type="password"
+            autoComplete="new-password"
+            value={nextPassword}
+            onChange={(e) => setNextPassword(e.target.value)}
+            minLength={8}
+            required
+          />
+        </Field>
         <button
+          type="submit"
           className="g-btn g-btn--primary"
           disabled={busy || !currentPassword || nextPassword.length < 8}
-          onClick={() => {
-            setBusy(true);
-            void changePassword(me.email!, currentPassword, nextPassword)
-              .then(() => {
-                toast("Password updated", "ok");
-                setCurrentPassword("");
-                setNextPassword("");
-              })
-              .catch((e) => toast(e instanceof Error ? e.message : "Could not change password", "err"))
-              .finally(() => setBusy(false));
-          }}
         >
           {busy ? "Saving…" : "Update password"}
         </button>
-      </div>
+      </form>
     </div>
   );
 }

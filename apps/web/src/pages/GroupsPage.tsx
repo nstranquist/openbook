@@ -1,37 +1,59 @@
 import { api, type Id } from "@openbook/shared";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Composer } from "../components/Composer";
+import { Field } from "../components/Field";
 import { PostCard, type EnrichedPost } from "../components/PostCard";
 import { runOrToast } from "../lib/run";
 
 function CreateGroup() {
   const create = useMutation(api.groups.create);
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [kind, setKind] = useState<"group" | "page">("group");
   const navigate = useNavigate();
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void runOrToast(create({ name, description, kind }), "Could not create").then((id) => {
+      if (!id) return;
+      setName("");
+      setDescription("");
+      navigate(`/groups/${id}`);
+    });
+  }
   return (
-    <div className="ob-card ob-row" style={{ gap: 8, flexWrap: "wrap" }}>
-      <input className="g-input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-      <select className="ob-select" value={kind} onChange={(e) => setKind(e.target.value as "group" | "page")}>
-        <option value="group">Group</option>
-        <option value="page">Page</option>
-      </select>
-      <button
-        className="ob-btn ob-btn--primary"
-        onClick={() =>
-          void runOrToast(create({ name, description: "", kind }), "Could not create").then((id) => {
-            if (id) {
-              setName("");
-              navigate(`/groups/${id}`);
-            }
-          })
-        }
-      >
-        Create
-      </button>
-    </div>
+    <form className="ob-card ob-stack ob-form" onSubmit={submit}>
+      <h2 className="ob-form-title">Create a group or page</h2>
+      <Field label="Name">
+        <input
+          className="g-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={80}
+          required
+        />
+      </Field>
+      <Field label="Description" hint="Optional. Add up to 500 characters.">
+        <textarea
+          className="g-textarea"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={500}
+        />
+      </Field>
+      <Field label="Type">
+        <select
+          className="g-select"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as "group" | "page")}
+        >
+          <option value="group">Group</option>
+          <option value="page">Page</option>
+        </select>
+      </Field>
+      <button type="submit" className="ob-btn ob-btn--primary">Create</button>
+    </form>
   );
 }
 

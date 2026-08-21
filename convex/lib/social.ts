@@ -391,6 +391,7 @@ export interface EnrichedPost {
   reactionTotal: number;
   author: AuthorCard;
   myReaction: ReactionKind | null;
+  isSaved: boolean;
   linkPreview: {
     url: string;
     title?: string;
@@ -411,7 +412,7 @@ export async function enrichPost(
       : []),
   ];
   const uniqueIds = [...new Set(ids)];
-  const [author, mine, signed, fallback, videoUrl] = await Promise.all([
+  const [author, mine, saved, signed, fallback, videoUrl] = await Promise.all([
     authorCard(ctx, post.authorId),
     ctx.db
       .query("reactions")
@@ -419,6 +420,12 @@ export async function enrichPost(
         q.eq("postId", post._id).eq("userId", viewerId),
       )
       .unique(),
+    ctx.db
+      .query("savedPosts")
+      .withIndex("by_user_post", (q) =>
+        q.eq("userId", viewerId).eq("postId", post._id),
+      )
+      .first(),
     Promise.all(uniqueIds.map((id) => signedMediaUrl(id))),
     Promise.all(uniqueIds.map((id) => ctx.storage.getUrl(id))),
     post.videoId ? ctx.storage.getUrl(post.videoId) : Promise.resolve(null),
@@ -444,6 +451,7 @@ export async function enrichPost(
     reactionTotal,
     author,
     myReaction: mine?.kind ?? null,
+    isSaved: saved !== null,
     linkPreview: post.linkPreview ?? null,
   };
 }
