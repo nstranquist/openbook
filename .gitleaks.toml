@@ -1,6 +1,18 @@
 [extend]
 useDefault = true
 
+[[allowlists]]
+description = "Generated dependencies, local run state, and native build output are outside the publication boundary."
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''^build/''',
+  '''^\.turbo/''',
+  '''^\.pw/''',
+  '''^apps/mobile/\.expo/''',
+  '''^apps/desktop/src-tauri/target/''',
+]
+
 [[rules]]
 id = "curl-auth-user"
 

@@ -13,6 +13,10 @@
     },
     "android": {
       "package": "dev.nstranquist.openbook"
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-status-bar"
+    ]
   }
 }

@@ -16,17 +16,17 @@ jobs:
   publication:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
         with:
-          version: 9.12.0
-      - uses: actions/setup-node@v4
+          version: 11.22.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: pnpm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26"
           cache: true
@@ -36,3 +36,53 @@ jobs:
         run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
       - name: Verify publication boundary
         run: pnpm verify:publication
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+      - name: Verify supported Expo graph
+        working-directory: apps/mobile
+        run: npx expo-doctor
+      - name: Verify production dependency audit
+        run: GO111MODULE=off go test ./tools/mobile-audit && GO111MODULE=off go run ./tools/mobile-audit --dir apps/mobile
+      - name: Export iOS bundle
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_OPENBOOK_URL: https://openbook.invalid
+        run: npx expo export --platform ios --output-dir "$RUNNER_TEMP/openbook-ios"
+      - name: Export Android bundle
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_OPENBOOK_URL: https://openbook.invalid
+        run: npx expo export --platform android --output-dir "$RUNNER_TEMP/openbook-android"
+
+  desktop:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Verify desktop npm graph
+        working-directory: apps/desktop
+        run: npm audit && npm exec tauri -- --version
+      - name: Check Tauri application
+        run: cargo check --locked --manifest-path apps/desktop/src-tauri/Cargo.toml

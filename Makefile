@@ -1,4 +1,4 @@
-.PHONY: help install test typecheck build verify verify-publication publish-ready export-publication desktop clean
+.PHONY: help install test typecheck build verify verify-mobile verify-desktop verify-publication publish-ready export-publication desktop clean
 
 # Vite default. Override when 5173 is taken: OPENBOOK_WEB_URL=http://localhost:5174 make desktop-tauri
 OPENBOOK_WEB_URL ?= http://localhost:5173
@@ -8,6 +8,8 @@ help:
 	@echo "  make install              # pnpm install --frozen-lockfile"
 	@echo "  make test | typecheck | build"
 	@echo "  make verify               # typecheck + test + build"
+	@echo "  make verify-mobile        # Expo doctor + reviewed production audit"
+	@echo "  make verify-desktop       # desktop npm audit + locked Cargo check"
 	@echo "  make verify-publication   # full publication gate (incl. gitleaks)"
 	@echo "  make desktop              # Chrome/Edge app-mode window"
 	@echo "  make desktop-tauri        # cargo check + Tauri window over OPENBOOK_WEB_URL"
@@ -28,11 +30,22 @@ build:
 
 verify: typecheck test build
 
+verify-mobile:
+	@test -d apps/mobile/node_modules || (echo "run npm ci in apps/mobile first" >&2; exit 2)
+	cd apps/mobile && npx expo-doctor
+	GO111MODULE=off go test ./tools/mobile-audit
+	GO111MODULE=off go run ./tools/mobile-audit --dir apps/mobile
+
+verify-desktop:
+	@test -d apps/desktop/node_modules || (echo "run npm ci in apps/desktop first" >&2; exit 2)
+	cd apps/desktop && npm audit && npm exec tauri -- --version
+	cargo check --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+
 verify-publication:
 	pnpm verify:publication
 
 # Local publication gate alias (no remote push).
-publish-ready: verify-publication
+publish-ready: verify-publication verify-mobile verify-desktop
 
 desktop:
 	OPENBOOK_URL="$(OPENBOOK_WEB_URL)" bash scripts/open-desktop.sh

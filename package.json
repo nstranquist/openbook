@@ -5,7 +5,10 @@
   "license": "MIT",
   "description": "Openbook — realtime social network (Vite + React web) on a single Convex backend",
   "type": "module",
-  "packageManager": "pnpm@9.12.0",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "concurrently -n convex,web -c magenta,cyan \"pnpm dev:backend\" \"pnpm dev:web\"",
     "dev:backend": "convex dev",
@@ -22,18 +25,18 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "concurrently": "^9.1.0",
-    "convex-test": "^0.0.38",
-    "react-router-dom": "^7.17.0",
-    "turbo": "^2.9.0",
-    "typescript": "^5.9.0",
-    "vitest": "^4.1.8"
+    "@types/node": "^22.19.21",
+    "concurrently": "^10.0.5",
+    "convex-test": "^0.0.56",
+    "turbo": "^2.10.11",
+    "typescript": "^7.0.2",
+    "vite": "8.2.1",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@auth/core": "^0.37.0",
-    "@convex-dev/auth": "^0.0.92",
-    "convex": "^1.39.0",
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
+    "convex": "^1.44.0",
     "web-push": "^3.6.7"
   }
 }
