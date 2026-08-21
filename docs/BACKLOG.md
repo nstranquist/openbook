@@ -16,7 +16,7 @@ edit, multi-image posts.
 | --- | --- |
 | App Store / Play / signed Tauri bundles | KEP-002 operator |
 | Hosted production userbase | KEP-003 `OPENBOOK_DEPLOY=I_UNDERSTAND` |
-| Link previews / albums / presence | next epic only if we still want more social surface |
+| Link previews / albums / presence | shipped in-repo (KEP-004) |
 
 ## Non-goals
 

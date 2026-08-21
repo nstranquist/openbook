@@ -31,6 +31,18 @@ async function befriend(a: { as: any; userId: Id<"users"> }, b: { as: any; userI
 
 const firstPage = { numItems: 20, cursor: null };
 
+describe("albums", () => {
+  it("creates an album for the owner", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const id = await alice.as.mutation(api.albums.create, { title: "Trip" });
+    const list = await alice.as.query(api.albums.listMine, { userId: alice.userId });
+    expect(list).toHaveLength(1);
+    expect(list[0]._id).toBe(id);
+    expect(list[0].title).toBe("Trip");
+  });
+});
+
 describe("profiles", () => {
   it("ensure is idempotent and creates exactly one profile", async () => {
     const t = convexTest(schema, modules);

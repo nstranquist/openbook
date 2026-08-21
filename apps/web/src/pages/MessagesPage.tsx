@@ -23,6 +23,8 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
   const editMessage = useMutation(api.messages.edit);
   const hideThread = useMutation(api.messages.hide);
   const markRead = useMutation(api.messages.markRead);
+  const touchTyping = useMutation(api.messages.touchTyping);
+  const typingIds = useQuery(api.messages.typing, { conversationId });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
   const [draft, setDraft] = useState("");
@@ -55,7 +57,12 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
         <div className="ob-row" style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", justifyContent: "space-between" }}>
           <span className="ob-row" style={{ gap: 8 }}>
             <Avatar name={meta.other.displayName} hue={meta.other.avatarHue} size={36} userId={meta.other.userId} />
-            <span className="ob-bold">{meta.other.displayName}</span>
+            <span>
+              <span className="ob-bold">{meta.other.displayName}</span>
+              {typingIds && typingIds.length > 0 ? (
+                <div className="ob-muted ob-small">typing…</div>
+              ) : null}
+            </span>
           </span>
           <button
             className="ob-btn ob-btn--sm"
@@ -127,7 +134,10 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
           className="ob-comment-input"
           placeholder="Aa"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (e.target.value.trim()) void touchTyping({ conversationId });
+          }}
           aria-label="Type a message"
         />
         <button className="ob-btn ob-btn--primary" disabled={!draft.trim()} type="submit">

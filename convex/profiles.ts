@@ -23,7 +23,10 @@ export const ensure = mutation({
     const existing = await profileOf(ctx, userId);
     const provided = displayName?.trim();
     if (existing?.deletedAt) throw new Error("This account is closed");
-    if (existing) return existing._id; // renames go through profiles.update
+    if (existing) {
+      await ctx.db.patch(existing._id, { lastSeenAt: Date.now() });
+      return existing._id; // renames go through profiles.update
+    }
     const user = await ctx.db.get(userId);
     const fallback = user?.email?.split("@")[0] ?? "Openbook user";
     return await ctx.db.insert("profiles", {
@@ -32,7 +35,20 @@ export const ensure = mutation({
       avatarHue: hueFromString(userId),
       coverHue: hueFromString([...userId].reverse().join("")),
       joinedAt: Date.now(),
+      lastSeenAt: Date.now(),
     });
+  },
+});
+
+export const heartbeat = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const profile = await profileOf(ctx, userId);
+    if (!profile || profile.deletedAt) return null;
+    await ctx.db.patch(profile._id, { lastSeenAt: Date.now() });
+    return profile._id;
   },
 });
 

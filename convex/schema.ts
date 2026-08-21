@@ -59,6 +59,7 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
     bioAudience: v.optional(audienceValidator),
     friendsListPublic: v.optional(v.boolean()),
+    lastSeenAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .searchIndex("search_name", { searchField: "displayName" }),
@@ -77,6 +78,15 @@ export default defineSchema({
     groupId: v.optional(v.id("groups")),
     commentCount: v.number(),
     reactionCounts: reactionCountsValidator,
+    linkPreview: v.optional(
+      v.object({
+        url: v.string(),
+        title: v.optional(v.string()),
+        description: v.optional(v.string()),
+        imageUrl: v.optional(v.string()),
+      }),
+    ),
+    albumId: v.optional(v.id("albums")),
   })
     .index("by_author", ["authorId"])
     .index("by_created", ["createdAt"])
@@ -293,4 +303,23 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
+
+  conversationTyping: defineTable({
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_conversation_user", ["conversationId", "userId"]),
+
+  albums: defineTable({
+    ownerId: v.id("users"),
+    title: v.string(),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
+  albumItems: defineTable({
+    albumId: v.id("albums"),
+    imageId: v.id("_storage"),
+    postId: v.optional(v.id("posts")),
+    createdAt: v.number(),
+  }).index("by_album", ["albumId"]),
 });

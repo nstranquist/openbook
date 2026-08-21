@@ -33,6 +33,7 @@ function EnsureProfile({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
   const me = useQuery(api.profiles.me);
   const ensure = useMutation(api.profiles.ensure);
+  const heartbeat = useMutation(api.profiles.heartbeat);
   useEffect(() => {
     if (!isAuthenticated || me === undefined || me?.deleted) return;
     const pendingName = sessionStorage.getItem("openbook.signupName");
@@ -40,6 +41,12 @@ function EnsureProfile({ children }: { children: React.ReactNode }) {
       sessionStorage.removeItem("openbook.signupName"),
     );
   }, [isAuthenticated, me, ensure]);
+  useEffect(() => {
+    if (!isAuthenticated || me?.deleted) return;
+    void heartbeat({});
+    const id = setInterval(() => void heartbeat({}), 30_000);
+    return () => clearInterval(id);
+  }, [isAuthenticated, me?.deleted, heartbeat]);
   if (me?.deleted) return <ClosedAccount />;
   return <>{children}</>;
 }

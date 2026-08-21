@@ -210,6 +210,45 @@ function AboutCard({ profile }: { profile: { bio?: string; work?: string; locati
   );
 }
 
+function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
+  const albums = useQuery(api.albums.listMine, { userId });
+  const create = useMutation(api.albums.create);
+  return (
+    <div className="ob-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span className="ob-bold" style={{ fontSize: 17 }}>Albums</span>
+      {isMe && (
+        <button
+          className="ob-btn"
+          onClick={() => {
+            const title = prompt("Album title");
+            if (!title?.trim()) return;
+            void runOrToast(create({ title }), "Could not create album");
+          }}
+        >
+          New album
+        </button>
+      )}
+      {(albums ?? []).length === 0 ? (
+        <div className="ob-empty ob-small">No albums yet.</div>
+      ) : (
+        (albums ?? []).map((a) => (
+          <div key={a._id} className="ob-row" style={{ gap: 8 }}>
+            {a.coverUrls[0] ? (
+              <img src={a.coverUrls[0]} alt="" width={48} height={48} style={{ objectFit: "cover", borderRadius: 8 }} />
+            ) : (
+              <div style={{ width: 48, height: 48, background: "var(--border)", borderRadius: 8 }} />
+            )}
+            <span>
+              <span className="ob-bold">{a.title}</span>
+              <div className="ob-muted ob-small">{a.itemCount} photos</div>
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function ProfileFriends({ userId }: { userId: Id<"users"> }) {
   const friends = useQuery(api.friends.list, { userId });
   return (
@@ -236,7 +275,7 @@ export function ProfilePage() {
   const id = userId as Id<"users">;
   const profile = useQuery(api.profiles.view, userId ? { userId: id } : "skip");
   const me = useQuery(api.profiles.me);
-  const [tab, setTab] = useState<"posts" | "about" | "friends">("posts");
+  const [tab, setTab] = useState<"posts" | "about" | "friends" | "albums">("posts");
   const [editing, setEditing] = useState(false);
   const { results, status, loadMore } = usePaginatedQuery(
     api.posts.forProfile,
@@ -270,6 +309,9 @@ export function ProfilePage() {
             <div className="ob-grow" style={{ paddingBottom: 8 }}>
               <h1 className="ob-profile-name">{profile.displayName}</h1>
               {profile.bio && <div className="ob-muted">{profile.bio}</div>}
+              {profile.lastSeenAt ? (
+                <div className="ob-muted ob-small">Last seen {joinedLabel(profile.lastSeenAt)}</div>
+              ) : null}
             </div>
             <div style={{ paddingBottom: 12 }}>
               {profile.isMe ? (
@@ -282,7 +324,7 @@ export function ProfilePage() {
             </div>
           </div>
           <div className="ob-tabs">
-            {(["posts", "about", "friends"] as const).map((t) => (
+            {(["posts", "about", "friends", "albums"] as const).map((t) => (
               <button
                 key={t}
                 className={`ob-ptab${tab === t ? " active" : ""}`}
@@ -302,6 +344,7 @@ export function ProfilePage() {
           )}
           {tab === "about" && <AboutCard profile={profile} />}
           {tab === "friends" && <ProfileFriends userId={id} />}
+          {tab === "albums" && <AlbumsCard userId={id} isMe={!!profile.isMe} />}
           {tab === "posts" && (
             <>
               <AboutCard profile={profile} />

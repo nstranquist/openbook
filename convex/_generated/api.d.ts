@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as albums from "../albums.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as blocks from "../blocks.js";
@@ -24,7 +25,9 @@ import type * as lib_plans from "../lib/plans.js";
 import type * as lib_rate from "../lib/rate.js";
 import type * as lib_social from "../lib/social.js";
 import type * as lib_stripe from "../lib/stripe.js";
+import type * as lib_unfurl from "../lib/unfurl.js";
 import type * as lib_uploads from "../lib/uploads.js";
+import type * as linkPreview from "../linkPreview.js";
 import type * as messages from "../messages.js";
 import type * as mutes from "../mutes.js";
 import type * as notifications from "../notifications.js";
@@ -43,6 +46,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  albums: typeof albums;
   auth: typeof auth;
   billing: typeof billing;
   blocks: typeof blocks;
@@ -59,7 +63,9 @@ declare const fullApi: ApiFromModules<{
   "lib/rate": typeof lib_rate;
   "lib/social": typeof lib_social;
   "lib/stripe": typeof lib_stripe;
+  "lib/unfurl": typeof lib_unfurl;
   "lib/uploads": typeof lib_uploads;
+  linkPreview: typeof linkPreview;
   messages: typeof messages;
   mutes: typeof mutes;
   notifications: typeof notifications;

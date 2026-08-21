@@ -32,6 +32,12 @@ interface EnrichedPost {
   reactionTotal: number;
   author: { userId: string; displayName: string; avatarHue: number };
   myReaction: ReactionKind | null;
+  linkPreview?: {
+    url: string;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+  } | null;
 }
 
 function ReactionSummary({
@@ -318,6 +324,27 @@ export function PostCard({ post, isMine }: { post: EnrichedPost; isMine: boolean
       ) : (
         <>
           {post.body ? <p className="ob-post-body">{post.body}</p> : null}
+          {post.linkPreview ? (
+            <a
+              className="ob-card"
+              href={post.linkPreview.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "block", marginTop: 8, textDecoration: "none" }}
+            >
+              {post.linkPreview.imageUrl ? (
+                <img
+                  src={post.linkPreview.imageUrl}
+                  alt=""
+                  style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8 }}
+                />
+              ) : null}
+              <div className="ob-bold">{post.linkPreview.title ?? post.linkPreview.url}</div>
+              {post.linkPreview.description ? (
+                <div className="ob-muted ob-small">{post.linkPreview.description}</div>
+              ) : null}
+            </a>
+          ) : null}
           {(post.imageUrls && post.imageUrls.length > 0
             ? post.imageUrls
             : post.imageUrl

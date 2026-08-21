@@ -391,6 +391,12 @@ export interface EnrichedPost {
   reactionTotal: number;
   author: AuthorCard;
   myReaction: ReactionKind | null;
+  linkPreview: {
+    url: string;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+  } | null;
 }
 
 export async function enrichPost(
@@ -438,6 +444,7 @@ export async function enrichPost(
     reactionTotal,
     author,
     myReaction: mine?.kind ?? null,
+    linkPreview: post.linkPreview ?? null,
   };
 }
 

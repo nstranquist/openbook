@@ -1,10 +1,8 @@
 # KEP-004 — Next epic after native/CDN
 
-- Status: parked
-- Date: 2026-08-20
+- Status: implemented in this run (not parked)
+- Date: 2026-08-21
 
-The native/CDN/deploy epic closed the deferred list. Further social
-surface (link previews, presence/typing, albums as a first-class table)
-is optional. Do not start it until a recruiter walkthrough needs it.
-
-Parked, not promised.
+Link previews (HMAC-safe unfurl of the first public http(s) URL on a
+post), presence heartbeat + last seen, conversation typing, and albums
+as first-class tables. Perfect World does not park this as a later slice.

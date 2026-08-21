@@ -20,6 +20,8 @@ import {
   requireActiveUser,
 } from "./lib/social";
 import { takeRate } from "./lib/rate";
+import { extractFirstHttpUrl } from "./lib/unfurl";
+import { internal } from "./_generated/api";
 import {
   assertImage,
   assertVideo,
@@ -165,7 +167,7 @@ export const create = mutation({
       .withIndex("by_author", (q) => q.eq("authorId", authorId))
       .collect();
     assertWithinLimit("posts", mine.length, planLimits(plan).posts, plan);
-    return await ctx.db.insert("posts", {
+    const postId = await ctx.db.insert("posts", {
       authorId,
       body: trimmed,
       audience,
@@ -177,6 +179,10 @@ export const create = mutation({
       commentCount: 0,
       reactionCounts: emptyReactionCounts(),
     });
+    if (extractFirstHttpUrl(trimmed)) {
+      await ctx.scheduler.runAfter(0, internal.linkPreview.unfurl, { postId, body: trimmed });
+    }
+    return postId;
   },
 });
 

@@ -354,3 +354,40 @@ export const unreadTotal = query({
     return total;
   },
 });
+
+const TYPING_TTL_MS = 6000;
+
+export const touchTyping = mutation({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, { conversationId }) => {
+    const me = await requireActiveUser(ctx);
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || !conversation.participantIds.includes(me))
+      throw new Error("Not a participant of this conversation");
+    const existing = await ctx.db
+      .query("conversationTyping")
+      .withIndex("by_conversation_user", (q) =>
+        q.eq("conversationId", conversationId).eq("userId", me),
+      )
+      .unique();
+    const now = Date.now();
+    if (existing) await ctx.db.patch(existing._id, { updatedAt: now });
+    else await ctx.db.insert("conversationTyping", { conversationId, userId: me, updatedAt: now });
+  },
+});
+
+export const typing = query({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, { conversationId }) => {
+    const me = await getAuthUserId(ctx);
+    if (!me) return [];
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation || !conversation.participantIds.includes(me)) return [];
+    const rows = await ctx.db
+      .query("conversationTyping")
+      .withIndex("by_conversation_user", (q) => q.eq("conversationId", conversationId))
+      .collect();
+    const cutoff = Date.now() - TYPING_TTL_MS;
+    return rows.filter((r) => r.userId !== me && r.updatedAt >= cutoff).map((r) => r.userId);
+  },
+});
