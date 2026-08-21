@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
-    "@types/node": "^22.19.21",
+    "@types/node": "^26.2.0",
     "concurrently": "^10.0.5",
     "convex-test": "^0.0.56",
     "turbo": "^2.10.11",
