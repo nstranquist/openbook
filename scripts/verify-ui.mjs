@@ -36,6 +36,7 @@ const run = (command, args, label) => {
 };
 const browser = (...args) => run(NDEV, ["browser", ...args], `ndev browser ${args.slice(0, 4).join(" ")}`);
 const ex = (verb, ...args) => browser("exec", S, verb, ...args);
+const snapshot = () => ex("snapshot", "--role", "button,link", "--max", "80");
 const evalJs = (js) => ex("eval", "", js);
 const pause = (seconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);
 const got = (js) => evalJs(js).trim();
@@ -59,10 +60,26 @@ const poll = (fn, tries = 6) => { for (let i = 0; i < tries; i++) { if (fn()) re
 const fn = (name) => makeFunctionReference(name);
 async function signUpHttp(name) {
   const client = new ConvexHttpClient(BACKEND);
-  const res = await client.action(fn("auth:signIn"), {
+  const email = `${name.toLowerCase()}@openbook.local`;
+  const password = `Pw-${name}-aA1!`;
+  const authenticate = (flow) => client.action(fn("auth:signIn"), {
     provider: "password",
-    params: { email: `${name.toLowerCase()}@openbook.local`, password: `Pw-${name}-aA1!`, flow: "signUp" },
+    params: { email, password, flow },
   });
+  let res;
+  try {
+    res = await authenticate("signUp");
+  } catch (error) {
+    if (!String(error?.message || error).includes("Server Error")) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // A generic self-hosted action error can arrive after the account commit.
+    // Try sign-in first; if no account exists, retry signup exactly once.
+    try {
+      res = await authenticate("signIn");
+    } catch {
+      res = await authenticate("signUp");
+    }
+  }
   const token = res?.tokens?.token;
   if (!token) throw new Error(`no auth token for ${name}: ${JSON.stringify(res)}`);
   client.setAuth(token);
@@ -87,7 +104,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     browser("open", S);
     ex("navigate", URL);
     pause(2);
-    ex("snapshot", "--role", "button,link", "--max", "80");
+    snapshot();
 
     // The session profile persists auth across runs — if a previous run's user is
     // still signed in, log out so A is ALWAYS a fresh, uniquely-named signup.
@@ -105,7 +122,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     if (exists('input[name="password"]')) ex("type", 'input[name="password"]', "hunter2-verify");
     clickText("Sign up"); pause(5);
     check("Signup authenticates + reaches the feed", exists(".ob-nav"));
-    ex("snapshot", "--role", "button,link", "--max", "80");
+    snapshot();
 
     // --- Create a post (backend write → reactive read) ---
     if (exists(".ob-composer-open")) { ex("click", ".ob-composer-open"); pause(1); }
@@ -113,6 +130,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     clickText("Post");
     check("Post announces success in the live region", poll(() => exists('.g-toast[role="status"]')));
     check("Post persists + renders in the feed", bodyHas(body), "real backend round-trip");
+    snapshot();
 
     // A's own post links to A's profile — the most robust way to learn A's userId.
     const aHref = gotStr(`document.querySelector('article.ob-card a[href^="/profile/"]')?.getAttribute('href')||''`);
@@ -126,6 +144,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
       poll(() => truthy(`(()=>{const card=[...document.querySelectorAll('article.ob-card')].find(card=>card.innerText.includes(${JSON.stringify(body)}));
         return [...(card?.querySelectorAll('button')??[])].some(button=>button.textContent.includes('Saved') && button.getAttribute('aria-pressed')==='true')})()`)));
     ex("click", 'a.ob-leftnav-item[href="/saved"]');
+    snapshot();
     check("Saved route renders the private saved post",
       poll(() => bodyHas("Saved posts") && bodyHas(body)));
     check("Left navigation stays mounted across route transitions",
@@ -134,11 +153,13 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
       exists('a.ob-leftnav-item[href="/saved"].active') && gotStr("document.activeElement?.id||''") === "main-content");
     ex("click", 'a.ob-leftnav-item[href="/"]');
     poll(() => bodyHas(body));
+    snapshot();
 
     // --- React to own post (reactions.toggle → myReaction persists) ---
     evalJs("document.querySelector('article.ob-card .ob-action')?.click()"); pause(2);
     check("Like reaction toggles on (reactions.toggle persisted)",
       exists("article.ob-card .ob-action.reacted"));
+    snapshot();
 
     // --- Comment on own post (comments.add → renders in thread) ---
     evalJs("[...document.querySelectorAll('article.ob-card')][0]?.querySelectorAll('.ob-action')[1]?.click()"); pause(1);
@@ -168,8 +189,9 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     }
 
     // --- Friend-request lifecycle (browser A confirms; persisted both sides) ---
-    if (aUserId) {
+    if (aUserId && bUser) {
       ex("click", 'a.ob-leftnav-item[href="/friends"]'); pause(2);
+      snapshot();
       check("Incoming friend request shows for A", poll(() => bodyHas("Friend Requests") && bodyHas(bName)));
       clickText("Confirm");
       check("After Confirm, B appears in All Friends (friends.accept persisted)",
@@ -195,6 +217,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     check("Notifications show unread before mark-read", poll(() => bellLabel().includes("unread")), bellLabel());
     evalJs("document.querySelector('.ob-leftnav').dataset.verifyNotifications='yes'");
     ex("click", 'a.ob-leftnav-item[href="/notifications"]');
+    snapshot();
     check("Full notifications page renders persisted items",
       poll(() => truthy(`document.querySelector('#notifications-title')?.textContent.trim()==='Notifications' &&
         document.querySelectorAll('.ob-notification-item').length > 0`)));
@@ -207,6 +230,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
       poll(() => bellLabel() === "Notifications"), bellLabel());
     evalJs(`document.querySelector('button[aria-label^="Notifications"]')?.click()`); pause(1);
     check("Notifications menu still opens from the full page", exists(".ob-menu"));
+    snapshot();
     evalJs("document.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))"); pause(1);
 
     // --- DM send (MessagesPage; persisted + delivered to B) ---
@@ -223,12 +247,14 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
         profileReady = poll(() => truthy(`location.pathname===${JSON.stringify(`/profile/${bUser.userId}`)}`));
       }
       check("Browser search opens the helper profile", profileReady);
+      if (profileReady) snapshot();
       const messageButtonReady = profileReady && poll(() => exists('button[aria-label="Message"]'));
       check("Friend profile exposes the message action", messageButtonReady);
       if (messageButtonReady) ex("click", 'button[aria-label="Message"]');
       const composerReady = messageButtonReady && poll(() => exists('input[aria-label="Type a message"]'));
       check("Friend profile opens the message composer", composerReady);
       if (composerReady) {
+        snapshot();
         ex("type", 'input[aria-label="Type a message"]', dmText);
         clickText("Send");
         check("DM renders in A's thread (messages.send persisted)",
@@ -240,16 +266,19 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
 
     // --- Account menu ---
     evalJs(`[...document.querySelectorAll('.ob-iconbtn')].find(b=>(b.getAttribute('aria-label')||'')==='Account menu')?.click()`); pause(1);
+    snapshot();
     check("Account menu opens (Log out present)", bodyHas("Log out"));
     evalJs("document.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))"); pause(1);
 
     // --- Form structure on the product-creation routes ---
     evalJs(`document.querySelector('a.ob-leftnav-item[href="/groups"]')?.click()`); pause(2);
+    snapshot();
     check("Group form is named and every field has a label",
       truthy(`!!document.querySelector('form[aria-labelledby="create-group-title"]') &&
         [...document.querySelectorAll('form[aria-labelledby="create-group-title"] input, form[aria-labelledby="create-group-title"] textarea, form[aria-labelledby="create-group-title"] select')]
           .every(field=>field.name && field.labels?.length===1)`));
     evalJs(`document.querySelector('a.ob-leftnav-item[href="/events"]')?.click()`); pause(2);
+    snapshot();
     check("Event form is named and every field has a label",
       truthy(`!!document.querySelector('form[aria-labelledby="create-event-title"]') &&
         [...document.querySelectorAll('form[aria-labelledby="create-event-title"] input, form[aria-labelledby="create-event-title"] textarea')]
@@ -257,6 +286,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
 
     // --- Settings page (real profiles.update mutation) ---
     evalJs(`document.querySelector('a.ob-leftnav-item[href="/settings"]')?.click()`); pause(3);
+    snapshot();
     check("Settings page renders with Save",
       bodyHas("Settings") &&
       truthy("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Save changes')"));
@@ -271,11 +301,12 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
     clickText("Save changes");
     check("Settings save updates the reactive shell identity",
       poll(() => truthy(`document.querySelector('.ob-leftnav-me')?.innerText.includes(${JSON.stringify(`${aName} edited`)})`)));
+    snapshot();
 
     // --- Responsive navigation and form layout ---
     poll(() => !exists('.g-toast'), 5);
     ex("viewport", "390x844"); pause(1);
-    ex("snapshot", "--role", "button,link", "--max", "80");
+    snapshot();
     check("Mobile layout uses the bottom nav and hides the desktop rail",
       truthy(`(()=>{const rail=document.querySelector('.ob-leftnav'); const nav=document.querySelector('.ob-nav-center');
         return !!rail && !!nav && getComputedStyle(rail).display==='none' &&
@@ -285,6 +316,7 @@ console.log(`\nopenbook UI verification (real Convex backend) → ${URL}  [backe
       gotStr("`${document.documentElement.scrollWidth}/${window.innerWidth}`"));
     ex("screenshot-current", "--out", "/tmp/ob-verify-mobile.png", "--viewport-only", "--timeout", "10s");
     ex("viewport", "1440x1000"); pause(1);
+    snapshot();
     check("Desktop left navigation is visible and sticky",
       truthy(`(()=>{const rail=document.querySelector('.ob-leftnav');
         return !!rail && getComputedStyle(rail).display!=='none' && getComputedStyle(rail).position==='sticky'})()`));
