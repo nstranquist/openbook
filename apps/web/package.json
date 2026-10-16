@@ -10,18 +10,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/auth": "^0.0.96",
     "@openbook/shared": "workspace:*",
-    "convex": "^1.44.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "react-router-dom": "^7.18.2"
+    "convex": "^1.46.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "6.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
     "typescript": "^7.0.2",
-    "vite": "8.2.1"
+    "vite": "8.3.4"
   }
 }
