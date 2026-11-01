@@ -9,7 +9,7 @@
     "android": "expo start --android"
   },
   "dependencies": {
-    "expo": "^57.0.15",
+    "expo": "^58.0.22",
     "expo-asset": "~57.0.13",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
