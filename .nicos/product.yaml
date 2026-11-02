@@ -4,8 +4,8 @@ name: Openbook (realtime social network)
 surface: products
 kind: product
 status: experimental
-persona: 'Demo/showcase: anyone evaluating the convex-realtime factory lane on a real social domain.'
-jtbd: Prove the scaffold lane carries a full social network — friend graph, audience-scoped feed, reactions, notifications, realtime DMs — with tests at every layer.
+persona: 'Operators and engineers who evaluate a realtime social product across application, security, recovery, and scale boundaries.'
+jtbd: Prove the stack carries a complete social network with bounded backend work, tested web and native clients, recovery controls, and an explicit production contract.
 pricing: Free OSS portfolio proof (factory output, not factory source).
 launch: built
 license: MIT
@@ -17,10 +17,26 @@ tags:
     - realtime
     - scaffold-validation
     - oss
+    - mobile
+    - desktop
+    - production-readiness
+    - operations
 checks:
-    - name: publication
+    - name: production-readiness
       command:
-        - pnpm
-        - verify:publication
-description: 'Realtime social network on the ndev stack-scaffold convex-realtime lane (web). Profiles + deterministic-hue avatars, friend request lifecycle + mutual-friend suggestions, public/friends audience feed (server-side visibility on posts, comments, and reactions), six social reactions with transaction-exact denormalized tallies, inline comments, notifications, friends-only DMs with unread accounting, and indexed people search. Scaffold billing spine on Settings (free tier = 100 posts). Verified locally: typecheck, 37 Convex tests, production build. Live E2E is scripts/verify-live.mjs against a self-hosted OSS backend. KB: kb/nicos-knowledge-base/local-dev/openbook-facebook-clone-convex.md'
+        - make
+        - publish-ready
+description: >-
+    Realtime social network with web, mobile, and desktop clients on a Convex
+    backend. The product includes server-enforced audience rules, friendship and
+    block graphs, groups, albums, stories, events, reactions, comments,
+    notifications, direct messages, search, billing controls, and media. The
+    production contract adds bounded indexed reads, resumable migrations,
+    upload grants and quotas, signed media, durable provider delivery, health
+    and readiness checks, telemetry, backup and restore tools, recovery targets,
+    exact-origin web and desktop policies, and capacity profiles. Local proof
+    passes 125 tests, live API checks, browser flows, native builds, a disposable
+    restore, and synthetic HTTP load smoke tests. The product is built and
+    locally publish-ready. It is not a deployed service, a public launch, an
+    adoption claim, or a hosted scale certification.
 portfolio_manifest: portfolio/manifest.yaml

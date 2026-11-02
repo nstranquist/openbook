@@ -1,11 +1,11 @@
 # Openbook product requirements
 
-Date: 2026-08-20
+Date: 2026-08-21
 Status: current
 
 Openbook is a realtime social product on one Convex backend and one web
 client. The web client is also the installable PWA. Native store binaries
-and a hosted public userbase stay operator-gated (KEP-002, KEP-003).
+and a hosted public userbase stay operator-gated (KEP-002, KEP-006).
 
 ## Who it is for
 
@@ -28,10 +28,11 @@ full-stack review, not a Meta clone.
 
 Server-enforced visibility, pair occupancy, mute vs block, reports with
 an operator queue, paginated comments, searchable posts and messages,
-owned uploads with EXIF strip on the client, hourly GC, private saved posts,
-paginated notifications, link previews, presence, password change while
-signed in, PWA install, web push when VAPID keys are set, a public status
-page, and a backup script.
+owned uploads with EXIF strip on the client, exact storage quotas, 10-minute
+bounded file cleanup, private saved posts, paginated notifications,
+DNS-pinned and storage-proxied link previews, presence, password change while
+signed in, PWA install, allowlisted web push when VAPID keys are set, a public
+status page, readiness, and verified backup and restore scripts.
 
 ## Out of scope
 

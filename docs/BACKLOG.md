@@ -1,7 +1,9 @@
 # Openbook backlog
 
-The product-code backlog is complete in this repository. Remaining work is
-operator execution: store signing and a hosted public userbase.
+The product and repository production epic is complete when the dated evidence
+receipt passes. Remaining work needs external authority or provider state. Do
+not describe those gates as shipped, deployed, launched, adopted, or
+scale-certified.
 
 ## Shipped in-repo (2026-08-20)
 
@@ -13,12 +15,35 @@ operator execution: store signing and a hosted public userbase.
 - HMAC `/media` CDN in front of Convex storage and `scripts/deploy.sh`.
 - Current supported web and native dependency families, plus native CI.
 
+## Production and scale in-repo (2026-08-21)
+
+- Bounded indexed backend reads, stable pagination, and cached visibility
+  evaluation.
+- Exact migrated content and storage counters, per-plan upload quotas, and
+  resumable orphan-file cleanup.
+- DNS-pinned link-preview fetching with bounded redirects, content, time, and
+  storage-proxied images. Browser push delivery uses a reviewed host allowlist.
+- Resumable content cleanup, account erasure, retention, and migrations.
+- Durable provider delivery with dedupe, leases, retry, and dead-job readiness.
+- Stripe replay receipts and out-of-order event protection.
+- Stable Clerk production identity; Convex Auth stays local-only.
+- Separate liveness and dependency readiness, scheduler heartbeat, redacted
+  client telemetry, security headers, CSP rendering, and release-bound assets.
+- Machine-checked launch and scale profiles, synthetic load receipts, guarded
+  Convex and Cloudflare deployment, verified backups, and disposable recovery.
+- Architecture, SLO, security, operations, recovery, and launch acceptance
+  documents in `docs/production/`.
+
 ## Still out
 
 | Item | Home |
 | --- | --- |
 | App Store / Play / signed Tauri bundles | KEP-002 operator |
-| Hosted production userbase | KEP-003 `OPENBOOK_DEPLOY=I_UNDERSTAND` |
+| Clerk production instance, custom domains, and live identity proof | KEP-006 launch checklist |
+| Cloudflare and Convex hosted deployment | KEP-006 operator confirmation |
+| Verified backup schedule, log stream, and alert delivery | KEP-006 operations |
+| Hosted HTTP capacity certification and realtime session soak | KEP-006 capacity |
+| Legal, privacy, abuse, on-call, and public registration decision | KEP-006 service owner |
 
 ## Maintenance gate
 
@@ -29,5 +54,5 @@ exception on 2026-09-20. It fails on any new finding or changed path.
 
 ## Non-goals
 
-Meta branding. Claiming a public hosted Openbook service from this repo
-until KEP-003 is executed by a human.
+Meta branding. Claiming a public hosted Openbook service from this repo until
+KEP-006 hosted acceptance and an explicit launch decision are complete.
