@@ -1,8 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { reactionKindValidator } from "./schema";
 import { authorCard, loadVisiblePost, notify, requireActiveUser, requireVisiblePost, type ReactionKind } from "./lib/social";
+import { MAX_REACTION_PREVIEW } from "./lib/limits";
+import { takeRate } from "./lib/rate";
 
 // Social reactions: one row per (post, user). `toggle` is the single
 // write path — same kind removes, different kind switches — and the post's
@@ -13,6 +14,7 @@ export const toggle = mutation({
   args: { postId: v.id("posts"), kind: reactionKindValidator },
   handler: async (ctx, { postId, kind }) => {
     const userId = await requireActiveUser(ctx);
+    await takeRate(ctx, userId, "reaction");
     const post = await requireVisiblePost(ctx, postId, userId);
     const counts = { ...post.reactionCounts } as Record<ReactionKind, number>;
     const existing = await ctx.db
@@ -53,13 +55,13 @@ export const toggle = mutation({
 export const listForPost = query({
   args: { postId: v.id("posts") },
   handler: async (ctx, { postId }) => {
-    const viewerId = await getAuthUserId(ctx);
+    const viewerId = await requireActiveUser(ctx).catch(() => null);
     if (!viewerId) return [];
     if (!(await loadVisiblePost(ctx, postId, viewerId))) return [];
     const rows = await ctx.db
       .query("reactions")
       .withIndex("by_post", (q) => q.eq("postId", postId))
-      .collect();
+      .take(MAX_REACTION_PREVIEW);
     return await Promise.all(
       rows.map(async (r) => ({
         kind: r.kind,

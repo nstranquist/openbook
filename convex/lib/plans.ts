@@ -7,11 +7,13 @@ export type Plan = "free" | "pro";
 
 export interface PlanLimits {
   posts: number | null;
+  storageBytes: number;
+  uploads: number;
 }
 
 const LIMITS: Record<Plan, PlanLimits> = {
-  free: { posts: 100 },
-  pro: { posts: null },
+  free: { posts: 100, storageBytes: 500_000_000, uploads: 1_000 },
+  pro: { posts: null, storageBytes: 10_000_000_000, uploads: 10_000 },
 };
 
 export function planLimits(plan: Plan): PlanLimits {
@@ -67,6 +69,18 @@ export function assertWithinLimit(
   plan: Plan,
 ): void {
   if (limit !== null && current >= limit) {
+    throw new PlanLimitError(resource, limit, plan);
+  }
+}
+
+export function assertAdditionWithinLimit(
+  resource: string,
+  current: number,
+  addition: number,
+  limit: number,
+  plan: Plan,
+): void {
+  if (addition < 0 || current + addition > limit) {
     throw new PlanLimitError(resource, limit, plan);
   }
 }

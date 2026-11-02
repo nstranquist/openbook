@@ -1,13 +1,15 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { enrichPost, loadVisiblePost, requireActiveUser } from "./lib/social";
+import { MAX_PAIR_ROWS } from "./lib/limits";
+import { takeRate } from "./lib/rate";
+import { boundedPaginationOptions } from "./lib/pagination";
 
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, { paginationOpts }) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await requireActiveUser(ctx).catch(() => null);
     if (!userId) {
       return { page: [], isDone: true, continueCursor: "" };
     }
@@ -15,7 +17,7 @@ export const list = query({
       .query("savedPosts")
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
-      .paginate(paginationOpts);
+      .paginate(boundedPaginationOptions(paginationOpts));
     const page = await Promise.all(
       rows.page.map(async (row) => {
         const post = await loadVisiblePost(ctx, row.postId, userId);
@@ -34,12 +36,13 @@ export const toggle = mutation({
   args: { postId: v.id("posts") },
   handler: async (ctx, { postId }) => {
     const userId = await requireActiveUser(ctx);
+    await takeRate(ctx, userId, "save");
     const post = await loadVisiblePost(ctx, postId, userId);
     if (!post) throw new Error("Post not found");
     const existing = await ctx.db
       .query("savedPosts")
       .withIndex("by_user_post", (q) => q.eq("userId", userId).eq("postId", postId))
-      .collect();
+      .take(MAX_PAIR_ROWS);
     if (existing.length > 0) {
       for (const row of existing) await ctx.db.delete(row._id);
       return false;

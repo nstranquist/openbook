@@ -9,6 +9,7 @@ import {
   modifyAccountCredentials,
   retrieveAccount,
 } from "@convex-dev/auth/server";
+import { configuredAuthMode } from "./lib/authIdentity";
 
 const resendKey = process.env.RESEND_API_KEY;
 function mailer(id: string, subject: string) {
@@ -36,6 +37,7 @@ function mailer(id: string, subject: string) {
         subject,
         text: `Your Openbook code is ${token}. It expires in about an hour.`,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new Error(`reset email: HTTP ${res.status}`);
   },
@@ -76,10 +78,10 @@ function PasswordChange() {
 }
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [
+  providers: configuredAuthMode() === "convex-auth" ? [
     Password({ reset: resetEmail, verify: verifyEmail }),
     PasswordChange(),
     GitHub,
     Google,
-  ],
+  ] : [],
 });

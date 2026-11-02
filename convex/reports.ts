@@ -1,7 +1,14 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query } from "./_generated/server";
-import { isOperator, requireActiveUser } from "./lib/social";
+import {
+  isOperator,
+  loadVisiblePost,
+  requireActiveProfile,
+  requireActiveUser,
+} from "./lib/social";
 import { takeRate } from "./lib/rate";
+import { boundedPaginationOptions } from "./lib/pagination";
 
 export const create = mutation({
   args: {
@@ -14,10 +21,34 @@ export const create = mutation({
     const trimmed = reason.trim();
     if (!trimmed) throw new Error("Reason required");
     if (!targetUserId && !postId) throw new Error("Nothing to report");
+    let target = targetUserId;
+    if (postId) {
+      const post = await loadVisiblePost(ctx, postId, me);
+      if (!post) throw new Error("Post not found");
+      if (target && target !== post.authorId) throw new Error("Report target does not match post");
+      target = post.authorId;
+    }
+    if (!target) throw new Error("Nothing to report");
+    await requireActiveProfile(ctx, target);
+    if (target === me) throw new Error("You cannot report yourself");
+    const duplicate = postId
+      ? await ctx.db
+          .query("reports")
+          .withIndex("by_reporter_post_status", (q) =>
+            q.eq("reporterId", me).eq("postId", postId).eq("status", "open"),
+          )
+          .first()
+      : await ctx.db
+          .query("reports")
+          .withIndex("by_reporter_target_status", (q) =>
+            q.eq("reporterId", me).eq("targetUserId", target).eq("status", "open"),
+          )
+          .first();
+    if (duplicate) return duplicate._id;
     await takeRate(ctx, me, "report");
     return await ctx.db.insert("reports", {
       reporterId: me,
-      targetUserId,
+      targetUserId: target,
       postId,
       reason: trimmed.slice(0, 500),
       status: "open",
@@ -59,6 +90,19 @@ export const queue = query({
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .order("desc")
       .take(40);
+  },
+});
+
+export const queuePage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const me = await requireActiveUser(ctx).catch(() => null);
+    if (!me || !isOperator(me)) return { page: [], isDone: true, continueCursor: "" };
+    return await ctx.db
+      .query("reports")
+      .withIndex("by_status", (q) => q.eq("status", "open"))
+      .order("desc")
+      .paginate(boundedPaginationOptions(paginationOpts));
   },
 });
 

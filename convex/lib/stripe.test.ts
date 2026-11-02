@@ -33,6 +33,8 @@ describe("verifyStripeSignature", () => {
   it("accepts a fresh, correctly signed payload", async () => {
     const now = 1_700_000_000;
     expect(await verifyStripeSignature(payload, await signHeader(payload, secret, now), secret, now)).toBe(true);
+    const valid = await signHeader(payload, secret, now);
+    expect(await verifyStripeSignature(payload, `${valid},v1=${"0".repeat(64)}`, secret, now)).toBe(true);
   });
   it("rejects a tampered payload", async () => {
     const now = 1_700_000_000;

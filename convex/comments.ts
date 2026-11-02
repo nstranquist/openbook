@@ -1,9 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authorCard, loadVisiblePost, notify, requireActiveUser, requireVisiblePost } from "./lib/social";
 import { takeRate } from "./lib/rate";
+import { boundedPaginationOptions } from "./lib/pagination";
 
 export const MAX_COMMENT_LENGTH = 2000;
 
@@ -40,7 +40,7 @@ export const add = mutation({
 export const list = query({
   args: { postId: v.id("posts"), paginationOpts: paginationOptsValidator },
   handler: async (ctx, { postId, paginationOpts }) => {
-    const viewerId = await getAuthUserId(ctx);
+    const viewerId = await requireActiveUser(ctx).catch(() => null);
     if (!viewerId) return { page: [], isDone: true, continueCursor: "" };
     if (!(await loadVisiblePost(ctx, postId, viewerId)))
       return { page: [], isDone: true, continueCursor: "" };
@@ -48,7 +48,7 @@ export const list = query({
       .query("comments")
       .withIndex("by_post", (q) => q.eq("postId", postId))
       .order("asc")
-      .paginate(paginationOpts);
+      .paginate(boundedPaginationOptions(paginationOpts));
     return {
       ...page,
       page: await Promise.all(
@@ -75,6 +75,7 @@ export const edit = mutation({
     if (!trimmed) throw new Error("Comment cannot be empty");
     if (trimmed.length > MAX_COMMENT_LENGTH)
       throw new Error(`Comment too long (max ${MAX_COMMENT_LENGTH})`);
+    await takeRate(ctx, userId, "comment");
     await ctx.db.patch(id, { body: trimmed, editedAt: Date.now() });
   },
 });
@@ -83,8 +84,7 @@ export const edit = mutation({
 export const remove = mutation({
   args: { id: v.id("comments") },
   handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireActiveUser(ctx);
     const comment = await ctx.db.get(id);
     if (!comment) return;
     const post = await ctx.db.get(comment.postId);

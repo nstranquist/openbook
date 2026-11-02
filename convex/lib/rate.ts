@@ -9,11 +9,19 @@ export const RATE_LIMITS = {
   message: 40,
   friend_request: 20,
   block: 30,
-  upload: 20,
+  upload: 8,
   story: 12,
   report: 10,
   group: 8,
+  group_membership: 30,
   event: 8,
+  album: 20,
+  profile: 20,
+  push: 10,
+  reaction: 60,
+  rsvp: 30,
+  save: 60,
+  typing: 30,
 } as const;
 
 export async function takeRate(

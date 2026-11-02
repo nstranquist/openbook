@@ -8,6 +8,7 @@
 // sk_live_… to charge real cards. (`process` is declared globally in env.d.ts.)
 
 const STRIPE_API = "https://api.stripe.com/v1";
+const PROVIDER_TIMEOUT_MS = 15_000;
 
 function isLocalDevHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
@@ -107,6 +108,7 @@ async function stripeForm(path: string, params: Record<string, unknown>): Promis
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
   const json = await res.json();
   if (!res.ok) {
@@ -122,6 +124,7 @@ export async function cancelStripeSubscriptionAtProvider(
   const res = await fetch(`${STRIPE_API}/subscriptions/${stripeSubscriptionId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${stripeSecretKey()}` },
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
   if (!res.ok && res.status !== 404) {
     const json = await res.json().catch(() => ({}));
@@ -237,15 +240,17 @@ export async function verifyStripeSignature(
   secret: string,
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): Promise<boolean> {
-  const parts = Object.fromEntries(
-    header.split(",").map((kv) => {
-      const idx = kv.indexOf("=");
-      return [kv.slice(0, idx).trim(), kv.slice(idx + 1).trim()];
-    }),
-  );
-  const timestamp = parts["t"];
-  const expected = parts["v1"];
-  if (!timestamp || !expected) return false;
+  let timestamp = "";
+  const signatures: string[] = [];
+  for (const field of header.split(",")) {
+    const index = field.indexOf("=");
+    if (index <= 0) continue;
+    const key = field.slice(0, index).trim();
+    const value = field.slice(index + 1).trim();
+    if (key === "t") timestamp = value;
+    if (key === "v1" && /^[0-9a-f]{64}$/i.test(value)) signatures.push(value.toLowerCase());
+  }
+  if (!timestamp || signatures.length === 0) return false;
   const ts = Number(timestamp);
   if (!Number.isFinite(ts)) return false;
   if (Math.abs(nowSeconds - ts) > SIGNATURE_TOLERANCE_SECONDS) return false;
@@ -259,5 +264,6 @@ export async function verifyStripeSignature(
     ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${timestamp}.${payload}`));
-  return timingSafeEqualHex(toHex(sig), expected);
+  const computed = toHex(sig);
+  return signatures.some((expected) => timingSafeEqualHex(computed, expected));
 }

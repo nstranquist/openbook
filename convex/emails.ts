@@ -1,5 +1,6 @@
 "use node";
 
+import { createHash } from "node:crypto";
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -16,6 +17,7 @@ import { v } from "convex/values";
 // via ctx.runAction(internal.emails.sendEmail, { to, subject, html }).
 
 const FROM = process.env.EMAIL_FROM || "Openbook <onboarding@resend.dev>";
+const PROVIDER_TIMEOUT_MS = 15_000;
 
 function providerName(): "resend" | "ses" | "smtp" {
   const p = (process.env.EMAIL_PROVIDER || "").trim().toLowerCase();
@@ -25,17 +27,30 @@ function providerName(): "resend" | "ses" | "smtp" {
   return "resend";
 }
 
-async function deliver(to: string, subject: string, html?: string, text?: string): Promise<string> {
+async function deliver(
+  to: string,
+  subject: string,
+  html?: string,
+  text?: string,
+  idempotencyKey?: string,
+): Promise<string> {
   switch (providerName()) {
     case "resend": {
       const key = process.env.RESEND_API_KEY;
       if (!key) throw new Error("RESEND_API_KEY is not set (EMAIL_PROVIDER=resend)");
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          ...(idempotencyKey
+            ? { "Idempotency-Key": `openbook-${createHash("sha256").update(idempotencyKey).digest("hex")}` }
+            : {}),
+        },
         body: JSON.stringify({ from: FROM, to, subject, html, text }),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       });
-      if (!res.ok) throw new Error(`resend: HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`resend: HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
       const data = (await res.json()) as { id: string };
       return data.id;
     }
@@ -75,9 +90,11 @@ export const sendEmail = internalAction({
     subject: v.string(),
     html: v.optional(v.string()),
     text: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (_ctx, { to, subject, html, text }) => {
-    const id = await deliver(to, subject, html, text);
+  handler: async (_ctx, { to, subject, html, text, idempotencyKey }) => {
+    if (idempotencyKey && idempotencyKey.length > 512) throw new Error("Email idempotency key is too large");
+    const id = await deliver(to, subject, html, text, idempotencyKey);
     return { id, provider: providerName() };
   },
 });

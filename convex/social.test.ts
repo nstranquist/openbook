@@ -1,10 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { modules } from "./test.setup";
 import { pairKey } from "./lib/social";
+import { registerOwnedUpload } from "./lib/uploads";
 
 // The social domain against the real schema: friendship lifecycle, feed
 // visibility, exact denormalized tallies, notification fan-out, and DM unread
@@ -40,10 +41,80 @@ describe("albums", () => {
     expect(list).toHaveLength(1);
     expect(list[0]._id).toBe(id);
     expect(list[0].title).toBe("Trip");
+    const page = await alice.as.query(api.albums.listPage, {
+      userId: alice.userId,
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(page.page[0]._id).toBe(id);
+  });
+
+  it("adds a registered owned photo and updates the exact album count", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const albumId = await alice.as.mutation(api.albums.create, { title: "Trip" });
+    const imageId = await t.run(async (ctx) => {
+      const id = await ctx.storage.store(
+        new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+      );
+      // convex-test omits Blob.type from its synthetic _storage metadata.
+      await (ctx.db as any).patch(id, { contentType: "image/png" });
+      return id;
+    });
+    await t.run(async (ctx) => registerOwnedUpload(ctx, alice.userId, imageId));
+    await alice.as.mutation(api.albums.addPhoto, { albumId, imageId });
+    const page = await alice.as.query(api.albums.listPage, {
+      userId: alice.userId,
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(page.page[0]).toMatchObject({ _id: albumId, itemCount: 1 });
+    await t.run(async (ctx) => {
+      const upload = await ctx.db
+        .query("uploads")
+        .withIndex("by_storage", (q) => q.eq("storageId", imageId))
+        .unique();
+      expect(upload).toMatchObject({ userId: alice.userId, used: true, size: 3 });
+    });
+  });
+
+  it("bounds active upload grants and binds registration to kind and byte size", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const grants = [];
+    for (let index = 0; index < 4; index += 1) {
+      grants.push(await alice.as.mutation(api.posts.generateUploadUrl, {
+        kind: "image",
+        declaredBytes: 3,
+      }));
+    }
+    await expect(alice.as.mutation(api.posts.generateUploadUrl, {
+      kind: "image",
+      declaredBytes: 3,
+    })).rejects.toThrow(/active uploads/i);
+
+    const imageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob([new Uint8Array([1, 2])], { type: "image/png" })),
+    );
+    await expect(alice.as.mutation(api.posts.registerImage, {
+      storageId: imageId,
+      grantId: grants[0].grantId,
+    })).rejects.toThrow(/size does not match/i);
+    await expect(alice.as.mutation(api.posts.registerVideo, {
+      storageId: imageId,
+      grantId: grants[0].grantId,
+    })).rejects.toThrow(/grant not found/i);
   });
 });
 
 describe("profiles", () => {
+  it("requires profile provisioning before an authenticated write", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await newUser(t, "unprovisioned@example.test");
+    const as = t.withIdentity({ subject: userId });
+    await expect(
+      as.mutation(api.posts.create, { body: "too early", audience: "public" }),
+    ).rejects.toThrow(/profile first/i);
+  });
+
   it("ensure is idempotent and creates exactly one profile", async () => {
     const t = convexTest(schema, modules);
     const userId = await newUser(t, "alice@example.test");
@@ -53,6 +124,15 @@ describe("profiles", () => {
     expect(id1).toBe(id2);
     const me = await as.query(api.profiles.me, {});
     expect(me?.displayName).toBe("Alice");
+  });
+
+  it("rejects an oversized display name during initial provisioning", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await newUser(t, "long-name@example.test");
+    const as = t.withIdentity({ subject: userId });
+    await expect(
+      as.mutation(api.profiles.ensure, { displayName: "x".repeat(81) }),
+    ).rejects.toThrow(/too long/i);
   });
 
   it("update validates and persists; empty display name rejected", async () => {
@@ -80,6 +160,164 @@ describe("profiles", () => {
   });
 });
 
+describe("production trust boundaries", () => {
+  it("stops cross-user state creation for a closed account but permits cleanup", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: true });
+    await alice.as.mutation(api.mutes.set, { userId: bob.userId, muted: true });
+    await t.run(async (ctx) => {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", bob.userId))
+        .unique();
+      await ctx.db.patch(profile!._id, { deletedAt: Date.now() });
+    });
+    await alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: false });
+    await alice.as.mutation(api.mutes.set, { userId: bob.userId, muted: false });
+    await expect(
+      alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: true }),
+    ).rejects.toThrow(/user not found/i);
+    await expect(
+      alice.as.mutation(api.mutes.set, { userId: bob.userId, muted: true }),
+    ).rejects.toThrow(/user not found/i);
+  });
+
+  it("validates moderation targets and deduplicates open reports", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const carol = await actor(t, "Carol");
+    const postId = await bob.as.mutation(api.posts.create, {
+      body: "Reportable",
+      audience: "public",
+    });
+    const first = await alice.as.mutation(api.reports.create, {
+      postId,
+      reason: "Abuse",
+    });
+    const duplicate = await alice.as.mutation(api.reports.create, {
+      postId,
+      reason: "Duplicate",
+    });
+    expect(duplicate).toBe(first);
+    await expect(
+      alice.as.mutation(api.reports.create, {
+        postId,
+        targetUserId: carol.userId,
+        reason: "Mismatch",
+      }),
+    ).rejects.toThrow(/does not match/i);
+    await expect(
+      alice.as.mutation(api.reports.create, {
+        targetUserId: alice.userId,
+        reason: "Self",
+      }),
+    ).rejects.toThrow(/yourself/i);
+  });
+
+  it("uses the event start index instead of exhausting the page on old events", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const futureId = await t.run(async (ctx) => {
+      const now = Date.now();
+      for (let index = 0; index < 45; index += 1) {
+        await ctx.db.insert("events", {
+          title: `Past ${index}`,
+          description: "",
+          startAt: now - 7_200_000 - index,
+          hostId: alice.userId,
+          createdAt: now - index,
+          goingCount: 1,
+          interestedCount: 0,
+        });
+      }
+      return await ctx.db.insert("events", {
+        title: "Future",
+        description: "",
+        startAt: now + 3_600_000,
+        hostId: alice.userId,
+        createdAt: now,
+        goingCount: 1,
+        interestedCount: 0,
+      });
+    });
+    const upcoming = await alice.as.query(api.events.upcoming, {});
+    expect(upcoming.map((event: any) => event._id)).toContain(futureId);
+  });
+
+  it("paginates past private group events without exposing them", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const anchorAt = Date.now();
+    const publicId = await t.run(async (ctx) => {
+      const groupId = await ctx.db.insert("groups", {
+        name: "Private",
+        description: "",
+        kind: "group",
+        creatorId: alice.userId,
+        createdAt: anchorAt,
+        memberCount: 1,
+      });
+      await ctx.db.insert("groupMembers", {
+        groupId,
+        userId: alice.userId,
+        role: "owner",
+        createdAt: anchorAt,
+      });
+      for (let index = 0; index < 55; index += 1) {
+        await ctx.db.insert("events", {
+          title: `Private ${index}`,
+          description: "",
+          startAt: anchorAt + 60_000 + index,
+          hostId: alice.userId,
+          groupId,
+          createdAt: anchorAt,
+        });
+      }
+      return await ctx.db.insert("events", {
+        title: "Public after private pages",
+        description: "",
+        startAt: anchorAt + 120_000,
+        hostId: alice.userId,
+        createdAt: anchorAt,
+      });
+    });
+
+    let cursor: string | null = null;
+    let done = false;
+    const visible: string[] = [];
+    for (let page = 0; page < 5 && !done; page += 1) {
+      const result = await bob.as.query(api.events.upcomingPage, {
+        anchorAt,
+        paginationOpts: { numItems: 20, cursor },
+      });
+      visible.push(...result.page.map((event: any) => event._id));
+      cursor = result.continueCursor;
+      done = result.isDone;
+    }
+    expect(visible).toEqual([publicId]);
+    expect(done).toBe(true);
+  });
+
+  it("revokes authenticated application reads as soon as the profile closes", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    await alice.as.mutation(api.posts.create, { body: "Before close", audience: "public" });
+    await t.run(async (ctx) => {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", alice.userId))
+        .unique();
+      await ctx.db.patch(profile!._id, { deletedAt: Date.now() });
+    });
+    expect((await alice.as.query(api.posts.feed, { paginationOpts: firstPage })).page).toEqual([]);
+    expect(await alice.as.query(api.notifications.list, {})).toEqual([]);
+  });
+});
+
 describe("friendship lifecycle", () => {
   it("request → accept makes both sides friends and notifies both directions", async () => {
     const t = convexTest(schema, modules);
@@ -96,6 +334,8 @@ describe("friendship lifecycle", () => {
     const bobFriends = await bob.as.query(api.friends.list, {});
     expect(aliceFriends.map((c: any) => c.userId)).toContain(bob.userId);
     expect(bobFriends.map((c: any) => c.userId)).toContain(alice.userId);
+    expect(await alice.as.query(api.friends.count, {})).toBe(1);
+    expect(await bob.as.query(api.friends.count, {})).toBe(1);
 
     expect(await bob.as.query(api.notifications.unreadCount, {})).toBe(0);
     const aliceNotifs = await alice.as.query(api.notifications.list, {});
@@ -130,6 +370,8 @@ describe("friendship lifecycle", () => {
     await bob.as.mutation(api.friends.sendRequest, { userId: alice.userId });
     const friends = await alice.as.query(api.friends.list, {});
     expect(friends.map((c: any) => c.userId)).toContain(bob.userId);
+    expect(await alice.as.query(api.friends.count, {})).toBe(1);
+    expect(await bob.as.query(api.friends.count, {})).toBe(1);
   });
 
   it("decline, cancel, and unfriend remove the edge", async () => {
@@ -149,6 +391,37 @@ describe("friendship lifecycle", () => {
     await alice.as.mutation(api.friends.unfriend, { userId: bob.userId });
     expect(await alice.as.query(api.friends.list, {})).toHaveLength(0);
     expect(await bob.as.query(api.friends.list, {})).toHaveLength(0);
+    expect(await alice.as.query(api.friends.count, {})).toBe(0);
+    expect(await bob.as.query(api.friends.count, {})).toBe(0);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("friendEdges").collect()).toEqual([]);
+    });
+  });
+
+  it("paginates both directions of a large friend list without gaps or duplicates", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const others = await Promise.all(
+      Array.from({ length: 7 }, (_, index) => actor(t, `Friend ${index}`)),
+    );
+    for (const [index, other] of others.entries()) {
+      if (index % 2 === 0) await befriend(alice, other);
+      else await befriend(other, alice);
+    }
+
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+      const page = await alice.as.query(api.friends.listPage, {
+        paginationOpts: { numItems: 2, cursor },
+      });
+      ids.push(...page.page.map((friend: any) => String(friend.userId)));
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    expect(new Set(ids)).toEqual(new Set(others.map((other) => String(other.userId))));
+    expect(ids).toHaveLength(others.length);
+    expect(await alice.as.query(api.friends.count, {})).toBe(others.length);
   });
 
   it("suggestions rank friends-of-friends by mutual count and exclude existing edges", async () => {
@@ -242,6 +515,43 @@ describe("posts + feed visibility", () => {
     expect(page.isDone).toBe(true);
   });
 
+  it("profile pagination crosses the bounded scan window without gaps or loops", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    await t.run(async (ctx) => {
+      const createdAt = Date.now();
+      for (let index = 0; index < 105; index += 1) {
+        await ctx.db.insert("posts", {
+          authorId: alice.userId,
+          body: `post-${index}`,
+          audience: "public",
+          createdAt,
+          commentCount: 0,
+          reactionCounts: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+        });
+      }
+    });
+    const ids = new Set<string>();
+    let cursor: string | null = null;
+    let done = false;
+    for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+      const result = await alice.as.query(api.posts.forProfile, {
+        userId: alice.userId,
+        paginationOpts: { numItems: 20, cursor },
+      });
+      expect(result.page.length > 0 || result.isDone).toBe(true);
+      for (const post of result.page) ids.add(post._id);
+      if (result.isDone) {
+        done = true;
+        break;
+      }
+      expect(result.continueCursor).not.toBe("");
+      cursor = result.continueCursor;
+    }
+    expect(done).toBe(true);
+    expect(ids.size).toBe(105);
+  });
+
   it("posts.get hides friends-only posts from strangers", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
@@ -282,7 +592,13 @@ describe("posts + feed visibility", () => {
 
     // Only the author may delete.
     await expect(bob.as.mutation(api.posts.remove, { id: postId })).rejects.toThrow(/author/i);
+    vi.useFakeTimers();
     await alice.as.mutation(api.posts.remove, { id: postId });
+
+    // The tombstone hides the post before bounded physical cleanup finishes.
+    expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    vi.useRealTimers();
 
     await t.run(async (ctx) => {
       expect(await ctx.db.get(postId)).toBeNull();
@@ -427,6 +743,68 @@ describe("notifications", () => {
     expect(await bob.as.query(api.notifications.list, {})).toHaveLength(0);
   });
 
+  it("markAllRead preserves notifications that arrive between batches", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const cutoff = 1_800_000_000_000;
+
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 105; index += 1) {
+        await ctx.db.insert("notifications", {
+          userId: alice.userId,
+          actorId: bob.userId,
+          kind: "friend_accept",
+          read: false,
+          createdAt: cutoff - 1,
+        });
+      }
+      const stats = await ctx.db
+        .query("userStats")
+        .withIndex("by_user", (q) => q.eq("userId", alice.userId))
+        .unique();
+      if (!stats) throw new Error("Missing user statistics");
+      await ctx.db.patch(stats._id, { notificationUnreadCount: 105 });
+    });
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(cutoff);
+      await alice.as.mutation(api.notifications.markAllRead, {});
+      vi.setSystemTime(cutoff + 1);
+      await t.run(async (ctx) => {
+        await ctx.db.insert("notifications", {
+          userId: alice.userId,
+          actorId: bob.userId,
+          kind: "friend_accept",
+          read: false,
+          createdAt: cutoff + 1,
+        });
+        const stats = await ctx.db
+          .query("userStats")
+          .withIndex("by_user", (q) => q.eq("userId", alice.userId))
+          .unique();
+        if (!stats) throw new Error("Missing user statistics");
+        await ctx.db.patch(stats._id, {
+          notificationUnreadCount: stats.notificationUnreadCount + 1,
+        });
+      });
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(await alice.as.query(api.notifications.unreadCount, {})).toBe(1);
+    await t.run(async (ctx) => {
+      const unread = await ctx.db
+        .query("notifications")
+        .withIndex("by_user", (q) => q.eq("userId", alice.userId).eq("read", false))
+        .collect();
+      expect(unread).toHaveLength(1);
+      expect(unread[0].createdAt).toBe(cutoff + 1);
+    });
+  });
+
   it("list is newest-first even after older items are marked read", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
@@ -466,6 +844,13 @@ describe("messages", () => {
     expect(bobConvs[0].lastMessageBody).toBe("you there?");
     expect(bobConvs[0].unreadCount).toBe(2);
     expect(bobConvs[0].other.displayName).toBe("Alice");
+    const bobPage = await bob.as.query(api.messages.myConversationsPage, {
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(bobPage.page[0].conversationId).toBe(conv1);
+    expect((await bob.as.query(api.messages.conversationSummary, {
+      conversationId: conv1,
+    }))?.unreadCount).toBe(2);
 
     await bob.as.mutation(api.messages.markRead, { conversationId: conv1 });
     expect(await bob.as.query(api.messages.unreadTotal, {})).toBe(0);
@@ -476,6 +861,30 @@ describe("messages", () => {
     // Newest-first pagination; isMine is viewer-relative.
     expect(thread.page.map((m: any) => m.body)).toEqual(["you there?", "hey Bob"]);
     expect(thread.page[0].isMine).toBe(false);
+  });
+
+  it("paginates the complete conversation list without a fixed cutoff", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const expected = new Set<string>();
+    for (let index = 0; index < 7; index += 1) {
+      const peer = await actor(t, `Peer ${index}`);
+      await befriend(alice, peer);
+      expected.add(String(await alice.as.mutation(api.messages.open, { userId: peer.userId })));
+    }
+
+    const actual: string[] = [];
+    let cursor: string | null = null;
+    for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+      const page = await alice.as.query(api.messages.myConversationsPage, {
+        paginationOpts: { numItems: 2, cursor },
+      });
+      actual.push(...page.page.map((row: any) => String(row.conversationId)));
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    expect(new Set(actual)).toEqual(expected);
+    expect(actual).toHaveLength(7);
   });
 
   it("non-participants cannot read or send; self-DM rejected", async () => {
@@ -624,6 +1033,15 @@ describe("privacy, reports, stories, events, search", () => {
     });
     expect(after.page[0].body).toBe("edited");
     expect(after.page[0].editedAt).toBeTruthy();
+    expect((await bob.as.query(api.messages.myConversations, {}))[0].lastMessageBody).toBe(
+      "edited",
+    );
+    await expect(
+      alice.as.mutation(api.messages.edit, {
+        id: thread.page[0]._id,
+        body: "x".repeat(4001),
+      }),
+    ).rejects.toThrow(/too long/i);
     await alice.as.mutation(api.messages.hide, { conversationId: conv });
     expect(await alice.as.query(api.messages.myConversations, {})).toEqual([]);
     await bob.as.mutation(api.messages.send, { conversationId: conv, body: "ping" });
@@ -662,6 +1080,33 @@ describe("privacy, reports, stories, events, search", () => {
     expect(row?.myRsvp).toBe("interested");
   });
 
+  it("keeps group events private to current members", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    const groupId = await alice.as.mutation(api.groups.create, {
+      name: "Private club",
+      description: "",
+      kind: "group",
+    });
+    const eventId = await alice.as.mutation(api.events.create, {
+      title: "Members only",
+      description: "",
+      startAt: Date.now() + 60_000,
+      groupId,
+    });
+    expect((await bob.as.query(api.events.upcoming, {})).map((event: any) => event._id)).not.toContain(
+      eventId,
+    );
+    await expect(
+      bob.as.mutation(api.events.rsvp, { eventId, status: "interested" }),
+    ).rejects.toThrow(/not found/i);
+    await bob.as.mutation(api.groups.join, { groupId });
+    expect((await bob.as.query(api.events.upcoming, {})).map((event: any) => event._id)).toContain(
+      eventId,
+    );
+  });
+
   it("reports can be withdrawn by the reporter", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
@@ -686,6 +1131,10 @@ describe("privacy, reports, stories, events, search", () => {
       });
       const queue = await alice.as.query(api.reports.queue, {});
       expect(queue.some((r: any) => r._id === id)).toBe(true);
+      const queuePage = await alice.as.query(api.reports.queuePage, {
+        paginationOpts: { numItems: 1, cursor: null },
+      });
+      expect(queuePage.page.some((report: any) => report._id === id)).toBe(true);
       await alice.as.mutation(api.reports.review, { id, status: "closed" });
       expect(await alice.as.query(api.reports.queue, {})).toEqual([]);
     } finally {
@@ -791,6 +1240,10 @@ describe("mute and groups", () => {
       body: "loud", audience: "public",
     });
     await bob.as.mutation(api.mutes.set, { userId: alice.userId, muted: true });
+    const mutedPage = await bob.as.query(api.mutes.listPage, {
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(mutedPage.page[0].userId).toBe(alice.userId);
     const feed = await bob.as.query(api.posts.feed, { paginationOpts: firstPage });
     expect(feed.page.map((p: any) => p._id)).not.toContain(postId);
     expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
@@ -804,6 +1257,10 @@ describe("mute and groups", () => {
     });
     const list = await alice.as.query(api.groups.list, {});
     expect(list.some((g: any) => g._id === id && g.role === "owner")).toBe(true);
+    const page = await alice.as.query(api.groups.listPage, {
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(page.page.some((group: any) => group._id === id && group.role === "owner")).toBe(true);
   });
 });
 
@@ -818,7 +1275,13 @@ describe("blocks", () => {
     });
     expect(await bob.as.query(api.posts.get, { id: postId })).not.toBeNull();
     await alice.as.mutation(api.blocks.set, { userId: bob.userId, blocked: true });
+    const blockedPage = await alice.as.query(api.blocks.listPage, {
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(blockedPage.page[0].userId).toBe(bob.userId);
     expect(await alice.as.query(api.friends.list, {})).toEqual([]);
+    expect(await alice.as.query(api.friends.count, {})).toBe(0);
+    expect(await bob.as.query(api.friends.count, {})).toBe(0);
     expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
     await expect(
       bob.as.mutation(api.friends.sendRequest, { userId: alice.userId }),
@@ -844,6 +1307,25 @@ describe("post edit and account close", () => {
     expect(got?.editedAt).toBeTruthy();
   });
 
+  it("allows an attached-video post to keep an empty text body", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const postId = await t.run(async (ctx) => {
+      const videoId = await ctx.storage.store(new Blob([new Uint8Array([1])]));
+      return await ctx.db.insert("posts", {
+        authorId: alice.userId,
+        body: "caption",
+        audience: "public",
+        videoId,
+        createdAt: Date.now(),
+        commentCount: 0,
+        reactionCounts: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
+      });
+    });
+    await alice.as.mutation(api.posts.update, { id: postId, body: "" });
+    expect((await alice.as.query(api.posts.get, { id: postId }))?.body).toBe("");
+  });
+
   it("deleteAccount hides the profile and posts", async () => {
     const t = convexTest(schema, modules);
     const alice = await actor(t, "Alice");
@@ -855,8 +1337,23 @@ describe("post edit and account close", () => {
     expect(await bob.as.query(api.profiles.view, { userId: alice.userId })).toBeNull();
     expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
     await expect(
+      bob.as.mutation(api.friends.sendRequest, { userId: alice.userId }),
+    ).rejects.toThrow(/user not found/i);
+    await expect(
       alice.as.mutation(api.posts.create, { body: "still here", audience: "public" }),
     ).rejects.toThrow(/closed/i);
+  });
+
+  it("stops new messages to an account as soon as it closes", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const conversationId = await alice.as.mutation(api.messages.open, { userId: bob.userId });
+    await bob.as.mutation(api.profiles.deleteAccount, {});
+    await expect(
+      alice.as.mutation(api.messages.send, { conversationId, body: "too late" }),
+    ).rejects.toThrow(/user not found/i);
   });
 });
 
@@ -907,8 +1404,184 @@ describe("saved posts", () => {
       body: "temporary", audience: "public",
     });
     await bob.as.mutation(api.saved.toggle, { postId });
+    vi.useFakeTimers();
     await alice.as.mutation(api.posts.remove, { id: postId });
+    expect((await bob.as.query(api.saved.list, { paginationOpts: firstPage })).page).toEqual([]);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    vi.useRealTimers();
     const rows = await t.run(async (ctx) => ctx.db.query("savedPosts").collect());
     expect(rows).toEqual([]);
+  });
+});
+
+describe("account deletion", () => {
+  it("tombstones immediately and drains large user data in bounded batches", async () => {
+    const t = convexTest(schema, modules);
+    const alice = await actor(t, "Alice");
+    const bob = await actor(t, "Bob");
+    await befriend(alice, bob);
+    const postId = await alice.as.mutation(api.posts.create, {
+      body: "remove my data",
+      audience: "public",
+    });
+
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      const conversationId = await ctx.db.insert("conversations", {
+        pairKey: pairKey(alice.userId, bob.userId),
+        participantIds: [alice.userId, bob.userId],
+        lastMessageAt: now,
+        lastMessageBody: "private",
+        lastSenderId: alice.userId,
+      });
+      await ctx.db.insert("conversationMembers", {
+        conversationId,
+        userId: alice.userId,
+        lastActivityAt: now,
+        unreadCount: 0,
+      });
+      await ctx.db.insert("conversationMembers", {
+        conversationId,
+        userId: bob.userId,
+        lastActivityAt: now,
+        unreadCount: 105,
+      });
+      for (let i = 0; i < 105; i++) {
+        await ctx.db.insert("messages", {
+          conversationId,
+          senderId: alice.userId,
+          body: `private ${i}`,
+          createdAt: now + i,
+        });
+        await ctx.db.insert("savedPosts", {
+          userId: alice.userId,
+          postId,
+          createdAt: now + i,
+        });
+      }
+      const sessionId = await ctx.db.insert("authSessions", {
+        userId: alice.userId,
+        expirationTime: now + 60_000,
+      });
+      for (let i = 0; i < 60; i++) {
+        await ctx.db.insert("authRefreshTokens", {
+          sessionId,
+          expirationTime: now + 60_000,
+        });
+      }
+      await ctx.db.insert("authVerifiers", {
+        sessionId,
+        signature: "private-verifier",
+      });
+      await ctx.db.insert("authRateLimits", {
+        identifier: "alice@example.test",
+        lastAttemptTime: now,
+        attemptsLeft: 1,
+      });
+      await ctx.db.insert("conversationTyping", {
+        conversationId,
+        userId: alice.userId,
+        updatedAt: now,
+      });
+      await ctx.db.insert("uploadGrants", {
+        userId: alice.userId,
+        kind: "image",
+        declaredBytes: 3,
+        active: true,
+        createdAt: now,
+      });
+      await ctx.db.insert("reports", {
+        reporterId: bob.userId,
+        targetUserId: alice.userId,
+        reason: "retain the moderation evidence",
+        status: "open",
+        createdAt: now,
+      });
+      const baseDelivery = {
+        subjectUserId: alice.userId,
+        state: "pending" as const,
+        attempts: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await ctx.db.insert("deliveryJobs", {
+        ...baseDelivery,
+        dedupeKey: "delete-email",
+        payload: {
+          kind: "email",
+          to: "alice@example.test",
+          subject: "Queued email",
+        },
+      });
+      await ctx.db.insert("deliveryJobs", {
+        ...baseDelivery,
+        dedupeKey: "delete-push",
+        payload: {
+          kind: "push",
+          userId: alice.userId,
+          title: "Queued push",
+          body: "Private notification",
+        },
+      });
+      await ctx.db.insert("deliveryJobs", {
+        ...baseDelivery,
+        dedupeKey: "delete-stripe",
+        payload: {
+          kind: "stripe_cancel",
+          stripeSubscriptionId: "sub_delete",
+        },
+      });
+    });
+
+    vi.useFakeTimers();
+    try {
+      await alice.as.mutation(api.profiles.deleteAccount, {});
+      expect(await bob.as.query(api.profiles.view, { userId: alice.userId })).toBeNull();
+      expect(await bob.as.query(api.posts.get, { id: postId })).toBeNull();
+      await t.finishAllScheduledFunctions(vi.runAllTimers, 500);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await t.run(async (ctx) => {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", alice.userId))
+        .unique();
+      const user = await ctx.db.get(alice.userId);
+      const job = await ctx.db
+        .query("accountDeletionJobs")
+        .withIndex("by_user", (q) => q.eq("userId", alice.userId))
+        .unique();
+      expect(profile?.displayName).toBe("Deleted account");
+      expect(profile?.deletedAt).toBeTypeOf("number");
+      expect(user?.email).toBeUndefined();
+      expect(job?.phase).toBe("complete");
+      expect(job?.completedAt).toBeTypeOf("number");
+      expect(await ctx.db.query("messages").withIndex("by_sender", (q) => q.eq("senderId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("savedPosts").withIndex("by_user_created", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("authSessions").withIndex("userId", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("authVerifiers").withIndex("signature", (q) => q.eq("signature", "private-verifier")).collect()).toEqual([]);
+      expect(await ctx.db.query("authRateLimits").withIndex("identifier", (q) => q.eq("identifier", "alice@example.test")).collect()).toEqual([]);
+      expect(await ctx.db.query("conversationTyping").withIndex("by_user", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("pairLocks").withIndex("by_user_a", (q) => q.eq("userA", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("pairLocks").withIndex("by_user_b", (q) => q.eq("userB", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("userStats").withIndex("by_user", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("uploadGrants").withIndex("by_user", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("friendEdges").withIndex("by_user_created", (q) => q.eq("userId", alice.userId)).collect()).toEqual([]);
+      expect(await ctx.db.query("friendEdges").withIndex("by_friend", (q) => q.eq("friendId", alice.userId)).collect()).toEqual([]);
+      const bobStats = await ctx.db.query("userStats").withIndex("by_user", (q) => q.eq("userId", bob.userId)).unique();
+      expect(bobStats?.friendCount).toBe(0);
+      const targetedReports = await ctx.db.query("reports").withIndex("by_target_user", (q) => q.eq("targetUserId", alice.userId)).collect();
+      expect(targetedReports).toEqual([]);
+      const deliveries = await ctx.db.query("deliveryJobs").collect();
+      expect(deliveries.map((row) => row.dedupeKey)).not.toContain("delete-email");
+      expect(deliveries.map((row) => row.dedupeKey)).not.toContain("delete-push");
+      const stripeCancellation = deliveries.find((row) => row.dedupeKey === "delete-stripe");
+      expect(stripeCancellation).toBeDefined();
+      expect(stripeCancellation?.subjectUserId).toBeUndefined();
+      expect(await ctx.db.get(postId)).toBeNull();
+    });
   });
 });

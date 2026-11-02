@@ -2,8 +2,9 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
   authorCard,
-  blockedPairIds,
-  friendIdsOf,
+  areFriends,
+  isBlockedEitherWay,
+  profileOf,
   requireActiveUser,
 } from "./lib/social";
 import { audienceValidator } from "./schema";
@@ -45,19 +46,17 @@ export const feed = query({
     const me = await requireActiveUser(ctx).catch(() => null);
     if (!me) return [];
     const now = Date.now();
-    const [friends, blocked] = await Promise.all([
-      friendIdsOf(ctx, me),
-      blockedPairIds(ctx, me),
-    ]);
-    const friendSet = new Set(friends);
     const recent = await ctx.db.query("stories").order("desc").take(80);
-    const visible = recent.filter((s) => {
+    const visibility = await Promise.all(recent.map(async (s) => {
       if (s.expiresAt <= now) return false;
+      const profile = await profileOf(ctx, s.authorId);
+      if (profile?.deletedAt) return false;
       if (s.authorId === me) return true;
-      if (blocked.has(s.authorId)) return false;
+      if (await isBlockedEitherWay(ctx, me, s.authorId)) return false;
       if (s.audience === "public") return true;
-      return friendSet.has(s.authorId);
-    });
+      return await areFriends(ctx, me, s.authorId);
+    }));
+    const visible = recent.filter((_, index) => visibility[index]);
     return await Promise.all(
       visible.slice(0, 24).map(async (s) => ({
         ...s,

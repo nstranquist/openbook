@@ -9,10 +9,49 @@ import { modules } from "./test.setup";
 // users exceed limits or fails to grant paid access — both worth pinning.
 
 async function newUser(t: ReturnType<typeof convexTest>) {
-  return await t.run(async (ctx) => ctx.db.insert("users", { email: "u@e.com" } as any));
+  return await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", { email: "u@e.com" } as any);
+    const now = Date.now();
+    await ctx.db.insert("profiles", {
+      userId,
+      displayName: "Billing user",
+      avatarHue: 1,
+      coverHue: 2,
+      joinedAt: now,
+    });
+    await ctx.db.insert("userStats", {
+      userId,
+      postCount: 0,
+      notificationUnreadCount: 0,
+      messageUnreadCount: 0,
+      storageBytes: 0,
+      uploadCount: 0,
+      postCountExact: true,
+      notificationUnreadCountExact: true,
+      messageUnreadCountExact: true,
+      storageBytesExact: true,
+      uploadCountExact: true,
+      updatedAt: now,
+    });
+    return userId;
+  });
 }
 
 describe("billing webhook sync", () => {
+  it("removes a closed account from the external billing context", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await newUser(t);
+    const as = t.withIdentity({ subject: userId });
+    await as.mutation(api.profiles.ensure, { displayName: "Closing user" });
+    expect((await as.query(internal.billing.billingContext, {})).userId).toBe(userId);
+    await as.mutation(api.profiles.deleteAccount, {});
+    expect(await as.query(internal.billing.billingContext, {})).toEqual({
+      userId: null,
+      email: null,
+      stripeCustomerId: null,
+    });
+  });
+
   it("upsertSubscription grants pro; cancelSubscription drops to free", async () => {
     const t = convexTest(schema, modules);
     const userId = await newUser(t);
@@ -45,6 +84,7 @@ describe("plan gate on posts.create", () => {
     const t = convexTest(schema, modules);
     const userId = await newUser(t);
     const as = t.withIdentity({ subject: userId });
+    await as.mutation(api.profiles.ensure, { displayName: "Plan user" });
 
     // Seed the free limit (100 posts) directly, then the next create must be rejected.
     await t.run(async (ctx) => {
@@ -55,6 +95,12 @@ describe("plan gate on posts.create", () => {
           reactionCounts: { like: 0, love: 0, haha: 0, wow: 0, sad: 0, angry: 0 },
         });
       }
+      const stats = await ctx.db
+        .query("userStats")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .unique();
+      if (!stats) throw new Error("Missing user statistics");
+      await ctx.db.patch(stats._id, { postCount: 100 });
     });
     await expect(
       as.mutation(api.posts.create, { body: "over", audience: "public" }),

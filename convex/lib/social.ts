@@ -1,8 +1,17 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { configuredAuthMode, currentUserId } from "./authIdentity";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { signedMediaUrl } from "./mediaSign";
+import { pushIsEnabled } from "./runtime";
+import { adjustUserStat } from "./stats";
+import { enqueueDelivery } from "./delivery";
+import {
+  MAX_FRIENDS,
+  MAX_GROUPS_PER_USER,
+  MAX_PAIR_ROWS,
+  NOTIFICATION_WRITE_BATCH,
+} from "./limits";
 
 // Shared social-graph helpers. Every function module routes pair identity,
 // friendship checks, post enrichment, and notification fan-out through here so
@@ -43,7 +52,7 @@ export async function friendshipForPair(
   const rows = await ctx.db
     .query("friendships")
     .withIndex("by_pair", (q) => q.eq("pairKey", pairKey(a, b)))
-    .collect();
+    .take(MAX_PAIR_ROWS);
   const keep = pickFriendship(rows);
   if (!keep) return null;
   if (rows.length > 1 && "insert" in ctx.db) {
@@ -64,27 +73,69 @@ export async function areFriends(
   return edge?.status === "accepted";
 }
 
-// Accepted friend ids of a user (both directions of the edge).
+export async function ensureFriendEdges(
+  ctx: MutationCtx,
+  friendshipId: Id<"friendships">,
+  a: Id<"users">,
+  b: Id<"users">,
+  createdAt: number,
+): Promise<void> {
+  if (a === b) throw new Error("A friend edge must connect two users");
+  for (const [userId, friendId] of [[a, b], [b, a]] as const) {
+    const rows = await ctx.db
+      .query("friendEdges")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", userId).eq("friendId", friendId),
+      )
+      .take(MAX_PAIR_ROWS + 1);
+    if (rows.length > MAX_PAIR_ROWS) {
+      throw new Error(`Friend edge duplicate limit exceeded (${MAX_PAIR_ROWS})`);
+    }
+    const keep = rows[0];
+    if (keep) {
+      if (keep.friendshipId !== friendshipId || keep.createdAt !== createdAt) {
+        await ctx.db.patch(keep._id, { friendshipId, createdAt });
+      }
+      for (const extra of rows.slice(1)) await ctx.db.delete(extra._id);
+    } else {
+      await ctx.db.insert("friendEdges", { userId, friendId, friendshipId, createdAt });
+    }
+  }
+}
+
+export async function deleteFriendEdges(
+  ctx: MutationCtx,
+  a: Id<"users">,
+  b: Id<"users">,
+): Promise<void> {
+  for (const [userId, friendId] of [[a, b], [b, a]] as const) {
+    const rows = await ctx.db
+      .query("friendEdges")
+      .withIndex("by_user_friend", (q) =>
+        q.eq("userId", userId).eq("friendId", friendId),
+      )
+      .take(MAX_PAIR_ROWS + 1);
+    if (rows.length > MAX_PAIR_ROWS) {
+      throw new Error(`Friend edge duplicate limit exceeded (${MAX_PAIR_ROWS})`);
+    }
+    for (const row of rows) await ctx.db.delete(row._id);
+  }
+}
+
+// Accepted friend ids use one materialized adjacency index. The required
+// production migration builds these rows before readiness can pass.
 export async function friendIdsOf(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
+  limit: number,
 ): Promise<Id<"users">[]> {
-  const sent = await ctx.db
-    .query("friendships")
-    .withIndex("by_requester_status", (q) =>
-      q.eq("requesterId", userId).eq("status", "accepted"),
-    )
-    .collect();
-  const received = await ctx.db
-    .query("friendships")
-    .withIndex("by_addressee_status", (q) =>
-      q.eq("addresseeId", userId).eq("status", "accepted"),
-    )
-    .collect();
-  return [
-    ...sent.map((f) => f.addresseeId),
-    ...received.map((f) => f.requesterId),
-  ];
+  const boundedLimit = Math.max(1, Math.min(limit, MAX_FRIENDS));
+  const rows = await ctx.db
+    .query("friendEdges")
+    .withIndex("by_user_created", (q) => q.eq("userId", userId))
+    .order("desc")
+    .take(boundedLimit);
+  return rows.map((row) => row.friendId);
 }
 
 export async function occupyPair(
@@ -92,18 +143,22 @@ export async function occupyPair(
   kind: string,
   key: string,
 ): Promise<void> {
+  const [rawA, rawB] = key.split(":");
+  if (!rawA || !rawB) throw new Error("Invalid pair key");
+  const userA = rawA as Id<"users">;
+  const userB = rawB as Id<"users">;
   const rows = await ctx.db
     .query("pairLocks")
     .withIndex("by_kind_key", (q) => q.eq("kind", kind).eq("pairKey", key))
-    .collect();
+    .take(MAX_PAIR_ROWS);
   const keep = rows[0];
   if (keep) {
     // Patch so a concurrent writer retries on this document (OCC).
-    await ctx.db.patch(keep._id, { createdAt: keep.createdAt });
+    await ctx.db.patch(keep._id, { createdAt: keep.createdAt, userA, userB });
     for (const extra of rows.slice(1)) await ctx.db.delete(extra._id);
     return;
   }
-  await ctx.db.insert("pairLocks", { kind, pairKey: key, createdAt: Date.now() });
+  await ctx.db.insert("pairLocks", { kind, pairKey: key, userA, userB, createdAt: Date.now() });
 }
 
 export function isOperator(userId: Id<"users">): boolean {
@@ -122,29 +177,19 @@ export async function groupIdsOf(
   const rows = await ctx.db
     .query("groupMembers")
     .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
+    .take(MAX_GROUPS_PER_USER);
   return rows.map((row) => row.groupId);
-}
-
-export async function mutedPairIds(
-  ctx: QueryCtx | MutationCtx,
-  viewerId: Id<"users">,
-): Promise<Set<Id<"users">>> {
-  const rows = await ctx.db
-    .query("mutes")
-    .withIndex("by_muter", (q) => q.eq("muterId", viewerId))
-    .collect();
-  return new Set(rows.map((row) => row.mutedId));
 }
 
 export async function requireActiveUser(
   ctx: QueryCtx | MutationCtx,
 ): Promise<Id<"users">> {
-  const userId = await getAuthUserId(ctx);
+  const userId = await currentUserId(ctx);
   if (!userId) throw new Error("Not authenticated");
   const profile = await profileOf(ctx, userId);
-  if (profile?.deletedAt) throw new Error("This account is closed");
-  if (process.env.RESEND_API_KEY) {
+  if (!profile) throw new Error("Create your profile first");
+  if (profile.deletedAt) throw new Error("This account is closed");
+  if (configuredAuthMode() === "convex-auth" && process.env.RESEND_API_KEY) {
     const user = await ctx.db.get(userId);
     if (user && !user.emailVerificationTime) {
       throw new Error("Verify your email first");
@@ -161,6 +206,15 @@ export async function profileOf(
     .query("profiles")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
+}
+
+export async function requireActiveProfile(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Doc<"profiles">> {
+  const profile = await profileOf(ctx, userId);
+  if (!profile || profile.deletedAt) throw new Error("User not found");
+  return profile;
 }
 
 // The author card embedded in enriched posts/comments/notifications.
@@ -182,24 +236,6 @@ export async function authorCard(
   };
 }
 
-export async function blockedPairIds(
-  ctx: QueryCtx | MutationCtx,
-  viewerId: Id<"users">,
-): Promise<Set<Id<"users">>> {
-  const out = new Set<Id<"users">>();
-  const asBlocker = await ctx.db
-    .query("blocks")
-    .withIndex("by_blocker", (q) => q.eq("blockerId", viewerId))
-    .collect();
-  const asBlocked = await ctx.db
-    .query("blocks")
-    .withIndex("by_blocked", (q) => q.eq("blockedId", viewerId))
-    .collect();
-  for (const row of asBlocker) out.add(row.blockedId);
-  for (const row of asBlocked) out.add(row.blockerId);
-  return out;
-}
-
 export async function isBlockedEitherWay(
   ctx: QueryCtx | MutationCtx,
   a: Id<"users">,
@@ -209,7 +245,7 @@ export async function isBlockedEitherWay(
   const rows = await ctx.db
     .query("blocks")
     .withIndex("by_pair", (q) => q.eq("pairKey", pairKey(a, b)))
-    .collect();
+    .take(MAX_PAIR_ROWS);
   return rows.length > 0;
 }
 
@@ -224,10 +260,22 @@ export async function deleteNotificationsBetween(
     .withIndex("by_user_actor", (q) =>
       q.eq("userId", recipientId).eq("actorId", actorId),
     )
-    .collect();
+    .take(NOTIFICATION_WRITE_BATCH);
+  let unreadDeleted = 0;
   for (const row of rows) {
     if (kinds && !kinds.includes(row.kind)) continue;
+    if (!row.read) unreadDeleted += 1;
     await ctx.db.delete(row._id);
+  }
+  if (unreadDeleted > 0) {
+    await adjustUserStat(ctx, recipientId, "notificationUnreadCount", -unreadDeleted);
+  }
+  if (rows.length === NOTIFICATION_WRITE_BATCH) {
+    await ctx.scheduler.runAfter(0, internal.notifications.deleteBetweenBatch, {
+      recipientId,
+      actorId,
+      kinds,
+    });
   }
 }
 
@@ -242,6 +290,7 @@ export function postVisibleTo(
   mutedIds?: Set<Id<"users">>,
   memberGroupIds?: Set<Id<"groups">>,
 ): boolean {
+  if (post.deletedAt) return false;
   if (post.authorId === viewerId) return true;
   if (blockedIds?.has(post.authorId)) return false;
   if (post.groupId && !memberGroupIds?.has(post.groupId)) return false;
@@ -249,6 +298,86 @@ export function postVisibleTo(
   if (post.groupId) return true;
   if (post.audience === "public") return true;
   return viewerFriendIds.has(post.authorId);
+}
+
+// Indexed point lookups scale with the page size, not with the viewer's full
+// friend, block, mute, or group graph. It also makes an account tombstone hide
+// every post immediately while physical cleanup continues in the background.
+export function postVisibilityEvaluator(
+  ctx: QueryCtx | MutationCtx,
+  viewerId: Id<"users">,
+  respectMute = true,
+): (post: Doc<"posts">) => Promise<boolean> {
+  const activeAuthors = new Map<Id<"users">, Promise<boolean>>();
+  const blockedAuthors = new Map<Id<"users">, Promise<boolean>>();
+  const mutedAuthors = new Map<Id<"users">, Promise<boolean>>();
+  const friendAuthors = new Map<Id<"users">, Promise<boolean>>();
+  const memberGroups = new Map<Id<"groups">, Promise<boolean>>();
+
+  return async (post) => {
+    if (post.deletedAt) return false;
+    if (post.authorId === viewerId) return true;
+    let active = activeAuthors.get(post.authorId);
+    if (!active) {
+      active = profileOf(ctx, post.authorId).then(
+        (profile) => profile !== null && !profile.deletedAt,
+      );
+      activeAuthors.set(post.authorId, active);
+    }
+    if (!(await active)) return false;
+    let blocked = blockedAuthors.get(post.authorId);
+    if (!blocked) {
+      blocked = isBlockedEitherWay(ctx, viewerId, post.authorId);
+      blockedAuthors.set(post.authorId, blocked);
+    }
+    if (await blocked) return false;
+    if (post.groupId) {
+      let member = memberGroups.get(post.groupId);
+      if (!member) {
+        member = ctx.db
+          .query("groupMembers")
+          .withIndex("by_group_user", (q) =>
+            q.eq("groupId", post.groupId!).eq("userId", viewerId),
+          )
+          .unique()
+          .then((membership) => membership !== null);
+        memberGroups.set(post.groupId, member);
+      }
+      return await member;
+    }
+    if (respectMute) {
+      let muted = mutedAuthors.get(post.authorId);
+      if (!muted) {
+        muted = ctx.db
+          .query("mutes")
+          .withIndex("by_pair", (q) => q.eq("pairKey", pairKey(viewerId, post.authorId)))
+          .take(MAX_PAIR_ROWS)
+          .then((rows) =>
+            rows.some(
+              (row) => row.muterId === viewerId && row.mutedId === post.authorId,
+            ),
+          );
+        mutedAuthors.set(post.authorId, muted);
+      }
+      if (await muted) return false;
+    }
+    if (post.audience === "public") return true;
+    let friend = friendAuthors.get(post.authorId);
+    if (!friend) {
+      friend = areFriends(ctx, viewerId, post.authorId);
+      friendAuthors.set(post.authorId, friend);
+    }
+    return await friend;
+  };
+}
+
+export async function postVisibleToViewer(
+  ctx: QueryCtx | MutationCtx,
+  post: Doc<"posts">,
+  viewerId: Id<"users">,
+  respectMute = true,
+): Promise<boolean> {
+  return await postVisibilityEvaluator(ctx, viewerId, respectMute)(post);
 }
 
 // Load a post only when the viewer may see it. Queries return null;
@@ -261,22 +390,7 @@ export async function loadVisiblePost(
 ): Promise<Doc<"posts"> | null> {
   const post = await ctx.db.get(postId);
   if (!post) return null;
-  const [friendIds, blockedIds, groupIds] = await Promise.all([
-    friendIdsOf(ctx, viewerId),
-    blockedPairIds(ctx, viewerId),
-    groupIdsOf(ctx, viewerId),
-  ]);
-  if (
-    !postVisibleTo(
-      post,
-      viewerId,
-      new Set(friendIds),
-      blockedIds,
-      undefined,
-      new Set(groupIds),
-    )
-  )
-    return null;
+  if (!(await postVisibleToViewer(ctx, post, viewerId, false))) return null;
   return post;
 }
 
@@ -301,7 +415,7 @@ function pickConversation(rows: Doc<"conversations">[]): Doc<"conversations"> | 
   })[0] ?? null;
 }
 
-async function reparentConversation(
+export async function reparentConversationBatch(
   ctx: MutationCtx,
   extra: Doc<"conversations">,
   keep: Doc<"conversations">,
@@ -309,14 +423,21 @@ async function reparentConversation(
   const messages = await ctx.db
     .query("messages")
     .withIndex("by_conversation", (q) => q.eq("conversationId", extra._id))
-    .collect();
+    .take(100);
   for (const message of messages) {
     await ctx.db.patch(message._id, { conversationId: keep._id });
+  }
+  if (messages.length === 100) {
+    await ctx.scheduler.runAfter(0, internal.messages.mergeConversationBatch, {
+      extraId: extra._id,
+      keepId: keep._id,
+    });
+    return;
   }
   const extraMembers = await ctx.db
     .query("conversationMembers")
     .withIndex("by_conversation_user", (q) => q.eq("conversationId", extra._id))
-    .collect();
+    .take(MAX_PAIR_ROWS);
   for (const extraMember of extraMembers) {
     const keepMember = await ctx.db
       .query("conversationMembers")
@@ -355,7 +476,7 @@ export async function collapseDuplicatePairRows(
     const rows = await ctx.db
       .query("friendships")
       .withIndex("by_pair", (q) => q.eq("pairKey", key))
-      .collect();
+      .take(MAX_PAIR_ROWS);
     const keep = pickFriendship(rows);
     if (!keep) return null;
     for (const extra of rows) {
@@ -366,11 +487,11 @@ export async function collapseDuplicatePairRows(
   const rows = await ctx.db
     .query("conversations")
     .withIndex("by_pair", (q) => q.eq("pairKey", key))
-    .collect();
+    .take(MAX_PAIR_ROWS);
   const keep = pickConversation(rows);
   if (!keep) return null;
   for (const extra of rows) {
-    if (extra._id !== keep._id) await reparentConversation(ctx, extra, keep);
+    if (extra._id !== keep._id) await reparentConversationBatch(ctx, extra, keep);
   }
   return (await ctx.db.get(keep._id)) ?? keep;
 }
@@ -400,6 +521,13 @@ export interface EnrichedPost {
   } | null;
 }
 
+async function resolvedMediaUrl(
+  ctx: QueryCtx | MutationCtx,
+  storageId: Id<"_storage">,
+): Promise<string | null> {
+  return (await signedMediaUrl(storageId)) ?? await ctx.storage.getUrl(storageId);
+}
+
 export async function enrichPost(
   ctx: QueryCtx | MutationCtx,
   post: Doc<"posts">,
@@ -412,7 +540,7 @@ export async function enrichPost(
       : []),
   ];
   const uniqueIds = [...new Set(ids)];
-  const [author, mine, saved, signed, fallback, videoUrl] = await Promise.all([
+  const [author, mine, saved, imageUrls, videoUrl, previewImageUrl] = await Promise.all([
     authorCard(ctx, post.authorId),
     ctx.db
       .query("reactions")
@@ -426,13 +554,13 @@ export async function enrichPost(
         q.eq("userId", viewerId).eq("postId", post._id),
       )
       .first(),
-    Promise.all(uniqueIds.map((id) => signedMediaUrl(id))),
-    Promise.all(uniqueIds.map((id) => ctx.storage.getUrl(id))),
-    post.videoId ? ctx.storage.getUrl(post.videoId) : Promise.resolve(null),
+    Promise.all(uniqueIds.map((id) => resolvedMediaUrl(ctx, id))).then((urls) =>
+      urls.filter((url): url is string => !!url)),
+    post.videoId ? resolvedMediaUrl(ctx, post.videoId) : Promise.resolve(null),
+    post.linkPreview?.imageId
+      ? resolvedMediaUrl(ctx, post.linkPreview.imageId)
+      : Promise.resolve(null),
   ]);
-  const imageUrls = uniqueIds
-    .map((_, i) => signed[i] ?? fallback[i])
-    .filter((u): u is string => !!u);
   const counts = post.reactionCounts as Record<ReactionKind, number>;
   const reactionTotal = REACTION_KINDS.reduce((sum, k) => sum + counts[k], 0);
   return {
@@ -452,7 +580,14 @@ export async function enrichPost(
     author,
     myReaction: mine?.kind ?? null,
     isSaved: saved !== null,
-    linkPreview: post.linkPreview ?? null,
+    linkPreview: post.linkPreview
+      ? {
+          url: post.linkPreview.url,
+          title: post.linkPreview.title,
+          description: post.linkPreview.description,
+          imageUrl: previewImageUrl ?? undefined,
+        }
+      : null,
   };
 }
 
@@ -467,7 +602,9 @@ export async function notify(
   },
 ): Promise<void> {
   if (args.userId === args.actorId) return;
-  await ctx.db.insert("notifications", {
+  const recipient = await profileOf(ctx, args.userId);
+  if (!recipient || recipient.deletedAt) return;
+  const notificationId = await ctx.db.insert("notifications", {
     userId: args.userId,
     actorId: args.actorId,
     kind: args.kind,
@@ -475,6 +612,7 @@ export async function notify(
     read: false,
     createdAt: Date.now(),
   });
+  await adjustUserStat(ctx, args.userId, "notificationUnreadCount", 1);
   const actor = await authorCard(ctx, args.actorId);
   const labels: Record<typeof args.kind, string> = {
     friend_request: "sent you a friend request",
@@ -494,20 +632,22 @@ export async function notify(
     const user = await ctx.db.get(args.userId);
     const email = (user as { email?: string } | null)?.email;
     if (email) {
-      await ctx.scheduler.runAfter(0, internal.emails.sendEmail, {
+      await enqueueDelivery(ctx, `notification:${notificationId}:email`, {
+        kind: "email",
         to: email,
         subject: "Openbook",
         text: `${text}${origin ? ` ${origin}${path}` : ""}`,
-      });
+      }, args.userId);
     }
   }
-  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-    await ctx.scheduler.runAfter(0, internal.pushSend.sendToUser, {
+  if (pushIsEnabled()) {
+    await enqueueDelivery(ctx, `notification:${notificationId}:push`, {
+      kind: "push",
       userId: args.userId,
       title: "Openbook",
       body: text,
       url: path,
-    });
+    }, args.userId);
   }
 }
 
