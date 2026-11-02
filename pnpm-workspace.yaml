@@ -7,3 +7,10 @@ packages:
 allowBuilds:
   esbuild: true
   workerd: true
+# Security floors for transitive dependencies whose parents still pin
+# vulnerable ranges (wrangler>miniflare, vite>postcss, concurrently).
+overrides:
+  undici: "^7.30.1"
+  sharp: "^0.35.5"
+  source-map-js: "^1.2.2"
+  shell-quote: "^1.12.0"

@@ -47,7 +47,7 @@ case "$TARGET" in
     esac
     if [ -z "${CONVEX_SELF_HOSTED_ADMIN_KEY:-}" ]; then
       CONTAINER="${CONVEX_CONTAINER:-openbook-convex}"
-      if ! docker ps --format '{{.Names}}' | rg -Fxq "$CONTAINER"; then
+      if ! docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER"; then
         echo "Local backup requires the running container $CONTAINER." >&2
         exit 2
       fi

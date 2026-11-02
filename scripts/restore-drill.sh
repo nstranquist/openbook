@@ -18,11 +18,11 @@ PORT="${CONVEX_RESTORE_PORT:-3320}"
 SITE_PORT="${CONVEX_RESTORE_SITE_PORT:-3321}"
 URL="http://127.0.0.1:${PORT}"
 SITE_URL="http://127.0.0.1:${SITE_PORT}"
-IMAGE="${CONVEX_IMAGE:-ghcr.io/get-convex/convex-backend@sha256:1f2044e3eac463ac78973b136c0baf72d4ada602611d853d6f99f280e29e0a98}"
+IMAGE="${CONVEX_IMAGE:-ghcr.io/convex/convex-backend@sha256:1f2044e3eac463ac78973b136c0baf72d4ada602611d853d6f99f280e29e0a98}"
 TASK_DIR="$(mktemp -d /tmp/openbook-restore-drill.XXXXXX)"
 HAD_LOCAL_ENV=0
 
-if docker ps -a --format '{{.Names}}' | rg -qx "$CONTAINER"; then
+if docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER"; then
   echo "Refusing to replace existing container $CONTAINER." >&2
   rmdir "$TASK_DIR"
   exit 2
@@ -64,10 +64,10 @@ npx convex import "$SNAPSHOT" --replace-all -y
 npx convex run migrations:startUserStats '{}'
 for _ in $(seq 1 60); do
   MIGRATION_STATUS="$(npx convex run migrations:userStatsStatus '{}')"
-  printf '%s' "$MIGRATION_STATUS" | rg -q '"status": "complete"' && break
+  printf '%s' "$MIGRATION_STATUS" | grep -Fq '"status": "complete"' && break
   sleep 1
 done
-printf '%s' "$MIGRATION_STATUS" | rg -q '"status": "complete"' || {
+printf '%s' "$MIGRATION_STATUS" | grep -Fq '"status": "complete"' || {
   echo "Required migration did not complete in the restored deployment." >&2
   exit 1
 }
