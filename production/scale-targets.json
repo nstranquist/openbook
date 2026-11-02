@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.2.0",
+  "profiles": [
+    {
+      "name": "launch",
+      "convex_class": "S256",
+      "provider_session_limit": 10000,
+      "target_concurrent_sessions": 1000,
+      "synthetic_concurrency": 1000,
+      "minimum_requests_per_second": 500,
+      "read_p95_ms": 500,
+      "write_p95_ms": 750,
+      "error_rate_percent": 1.0,
+      "availability_percent": 99.5,
+      "minimum_load_test_minutes": 15,
+      "maximum_backup_age_hours": 26,
+      "recovery_time_objective_minutes": 240
+    },
+    {
+      "name": "scale",
+      "convex_class": "D1024",
+      "provider_session_limit": 100000,
+      "target_concurrent_sessions": 50000,
+      "synthetic_concurrency": 5000,
+      "minimum_requests_per_second": 2500,
+      "read_p95_ms": 300,
+      "write_p95_ms": 500,
+      "error_rate_percent": 0.5,
+      "availability_percent": 99.9,
+      "minimum_load_test_minutes": 60,
+      "maximum_backup_age_hours": 2,
+      "recovery_time_objective_minutes": 60
+    }
+  ]
+}

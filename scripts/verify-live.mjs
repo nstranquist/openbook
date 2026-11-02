@@ -68,6 +68,14 @@ async function main() {
   const aliceFriends = await alice.client.query(fn("friends:list"), {});
   check("Alice and Bob are mutual friends",
     aliceFriends.some((f) => f.userId === bob.userId));
+  const aliceFriendPage = await alice.client.query(fn("friends:listPage"), {
+    paginationOpts: { numItems: 1, cursor: null },
+  });
+  check(
+    "friend count and paginated graph are exact",
+    (await alice.client.query(fn("friends:count"), {})) === 1 &&
+      aliceFriendPage.page.some((f) => f.userId === bob.userId),
+  );
 
   // 4) Posts: one friends-only, one public.
   const friendsPostId = await alice.client.mutation(fn("posts:create"), {
@@ -77,6 +85,22 @@ async function main() {
     body: `public-${stamp}`, audience: "public",
   });
   check("posts created", !!friendsPostId && !!publicPostId);
+
+  const previewPostId = await alice.client.mutation(fn("posts:create"), {
+    body: "https://example.com/",
+    audience: "public",
+  });
+  let previewPost = null;
+  for (let attempt = 0; attempt < 24; attempt++) {
+    previewPost = await alice.client.query(fn("posts:get"), { id: previewPostId });
+    if (previewPost?.linkPreview?.title) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  check(
+    "server-side link preview fetch completes",
+    previewPost?.linkPreview?.url === "https://example.com/" &&
+      /example domain/i.test(previewPost?.linkPreview?.title ?? ""),
+  );
 
   // 5) Feed visibility: friend sees both, stranger only the public one.
   const bobFeed = await bob.client.query(fn("posts:feed"), { paginationOpts: PAGE });
@@ -149,12 +173,15 @@ async function main() {
     (await mallory.client.query(fn("posts:get"), { id: groupPostId })) === null);
 
   try {
-    const uploadUrl = await alice.client.mutation(fn("posts:generateUploadUrl"), {});
     const png = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
       "base64",
     );
-    const uploaded = await fetch(uploadUrl, {
+    const uploadGrant = await alice.client.mutation(fn("posts:generateUploadUrl"), {
+      kind: "image",
+      declaredBytes: png.length,
+    });
+    const uploaded = await fetch(uploadGrant.uploadUrl, {
       method: "POST",
       headers: { "Content-Type": "image/png" },
       body: png,
@@ -162,15 +189,95 @@ async function main() {
     check("image upload accepted", uploaded.ok, `HTTP ${uploaded.status}`);
     if (uploaded.ok) {
       const { storageId } = await uploaded.json();
-      await alice.client.mutation(fn("posts:registerImage"), { storageId });
+      await alice.client.mutation(fn("posts:registerImage"), {
+        storageId,
+        grantId: uploadGrant.grantId,
+      });
       const photoId = await alice.client.mutation(fn("posts:create"), {
         body: `photo-${stamp}`, audience: "public", imageId: storageId,
       });
       const photo = await bob.client.query(fn("posts:get"), { id: photoId });
       check("photo post has an image URL", !!photo?.imageUrl);
+      if (photo?.imageUrl) {
+        const mediaUrl = new globalThis.URL(photo.imageUrl);
+        const signedRoute =
+          mediaUrl.pathname === "/media" &&
+          mediaUrl.searchParams.get("id") === storageId &&
+          /^\d+$/.test(mediaUrl.searchParams.get("exp") ?? "") &&
+          /^[a-f0-9]{64}$/.test(mediaUrl.searchParams.get("sig") ?? "");
+        check("photo uses the signed media route", signedRoute);
+
+        const fullMedia = await fetch(mediaUrl);
+        const fullBody = Buffer.from(await fullMedia.arrayBuffer());
+        const cacheSeconds = Number(
+          /max-age=(\d+)/.exec(fullMedia.headers.get("cache-control") ?? "")?.[1] ?? "-1",
+        );
+        check("signed media returns the exact image", fullMedia.status === 200 && fullBody.equals(png));
+        check(
+          "signed media sends hardened response headers",
+          fullMedia.headers.get("x-content-type-options") === "nosniff" &&
+            fullMedia.headers.get("content-security-policy") === "default-src 'none'; sandbox" &&
+            fullMedia.headers.get("accept-ranges") === "bytes" &&
+            fullMedia.headers.get("content-type") === "image/png" &&
+            cacheSeconds >= 0 && cacheSeconds <= 3600,
+        );
+
+        const partialMedia = await fetch(mediaUrl, { headers: { Range: "bytes=0-0" } });
+        const partialBody = Buffer.from(await partialMedia.arrayBuffer());
+        check(
+          "signed media serves a bounded byte range",
+          partialMedia.status === 206 &&
+            partialBody.length === 1 &&
+            partialBody[0] === png[0] &&
+            partialMedia.headers.get("content-range") === `bytes 0-0/${png.length}` &&
+            partialMedia.headers.get("content-length") === "1",
+        );
+
+        const invalidRange = await fetch(mediaUrl, { headers: { Range: "bytes=999999-" } });
+        check(
+          "signed media rejects an unsatisfied byte range",
+          invalidRange.status === 416 &&
+            invalidRange.headers.get("content-range") === `bytes */${png.length}`,
+        );
+      }
     }
   } catch (err) {
-    check("image upload accepted", false, err instanceof Error ? err.message : String(err));
+    check("image and signed-media workflow completes", false, err instanceof Error ? err.message : String(err));
+  }
+
+  try {
+    const albumId = await alice.client.mutation(fn("albums:create"), { title: `Album ${stamp}` });
+    const albumPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const albumGrant = await alice.client.mutation(fn("posts:generateUploadUrl"), {
+      kind: "image",
+      declaredBytes: albumPng.length,
+    });
+    const albumUpload = await fetch(albumGrant.uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: albumPng,
+    });
+    if (!albumUpload.ok) throw new Error(`album upload HTTP ${albumUpload.status}`);
+    const { storageId } = await albumUpload.json();
+    await alice.client.mutation(fn("posts:registerImage"), {
+      storageId,
+      grantId: albumGrant.grantId,
+    });
+    await alice.client.mutation(fn("albums:addPhoto"), { albumId, imageId: storageId });
+    const albums = await alice.client.query(fn("albums:listPage"), {
+      userId: alice.userId,
+      paginationOpts: PAGE,
+    });
+    check(
+      "album photo follows registered ownership and paginated reads",
+      albums.page.some((album) => album._id === albumId && album.itemCount === 1),
+    );
+  } catch (err) {
+    check("album photo follows registered ownership and paginated reads", false,
+      err instanceof Error ? err.message : String(err));
   }
 
   // 6) Reactions + comments, with denormalized tallies + notifications.
@@ -199,9 +306,16 @@ async function main() {
   await bob.client.mutation(fn("messages:send"), { conversationId, body: "ping" });
   check("DM unread total reaches the recipient",
     (await alice.client.query(fn("messages:unreadTotal"), {})) === 2);
-  const aliceConvs = await alice.client.query(fn("messages:myConversations"), {});
-  check("conversation preview shows last message",
-    aliceConvs[0]?.lastMessageBody === "ping" && aliceConvs[0]?.other?.userId === bob.userId);
+  const aliceConvs = await alice.client.query(fn("messages:myConversationsPage"), {
+    paginationOpts: PAGE,
+  });
+  const conversationSummary = await alice.client.query(fn("messages:conversationSummary"), {
+    conversationId,
+  });
+  check("paginated conversation preview and direct summary show the last message",
+    aliceConvs.page[0]?.lastMessageBody === "ping" &&
+      aliceConvs.page[0]?.other?.userId === bob.userId &&
+      conversationSummary?.lastMessageBody === "ping");
   await alice.client.mutation(fn("messages:markRead"), { conversationId });
   check("markRead zeroes the unread badge",
     (await alice.client.query(fn("messages:unreadTotal"), {})) === 0);

@@ -9,8 +9,8 @@
 // PERSISTED backend effect on BOTH sides (DOM round-trip + cross-user query).
 //
 // Run with the app + self-hosted backend up:
-//   node scripts/verify-ui.mjs                          # URL :5176, backend :3230
-//   URL=http://localhost:5176/ CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3230 node scripts/verify-ui.mjs
+//   node scripts/verify-ui.mjs                          # URL :5176, backend :3210
+//   URL=http://localhost:5176/ CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210 node scripts/verify-ui.mjs
 import { execFileSync } from "node:child_process";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
@@ -18,10 +18,10 @@ import { makeFunctionReference } from "convex/server";
 const NDEV = process.env.NDEV || "ndev";
 const URL = process.env.URL || "http://localhost:5176/";
 const S = process.env.SESSION || "ob-verify";
-// The web app on :5176 is started with VITE_CONVEX_URL=http://127.0.0.1:3230 — the helper
+// The web app on :5176 is started with VITE_CONVEX_URL=http://127.0.0.1:3210 — the helper
 // user must hit the SAME backend so its writes show up in A's browser.
 const BACKEND =
-  process.env.CONVEX_SELF_HOSTED_URL || process.env.VITE_CONVEX_URL || "http://127.0.0.1:3230";
+  process.env.CONVEX_SELF_HOSTED_URL || process.env.VITE_CONVEX_URL || "http://127.0.0.1:3210";
 
 const run = (command, args, label) => {
   try {

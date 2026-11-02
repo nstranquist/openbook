@@ -24,7 +24,7 @@ jobs:
           version: 11.22.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -37,13 +37,36 @@ jobs:
       - name: Verify publication boundary
         run: pnpm verify:publication
 
+  backend-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Deploy to a pinned self-hosted Convex backend
+        run: pnpm selfhost
+      - name: Verify real backend behavior
+        env:
+          CONVEX_SELF_HOSTED_URL: http://127.0.0.1:3210
+        run: pnpm verify:live
+      - name: Remove the disposable backend
+        if: always()
+        run: docker stop openbook-convex && docker container rm openbook-convex
+
   mobile:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -73,11 +96,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+        with:
+          version: 11.22.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          node-version: "24"
+          cache: pnpm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          cache: false
+      - name: Build web assets for the desktop shell
+        run: pnpm install --frozen-lockfile && pnpm build
       - name: Install desktop dependencies
         working-directory: apps/desktop
         run: npm ci
@@ -86,3 +117,8 @@ jobs:
         run: npm audit && npm exec tauri -- --version
       - name: Check Tauri application
         run: cargo check --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Render exact-origin Tauri test config
+        run: GO111MODULE=off go run ./tools/openbookctl desktop-config --file apps/desktop/src-tauri/target/openbook-production-config.json --clerk-origin https://clerk.openbook.example.invalid --convex-origin https://api.openbook.example.invalid --convex-site-origin https://site.openbook.example.invalid
+      - name: Build optimized Tauri application
+        working-directory: apps/desktop
+        run: npm exec tauri -- build --ci --no-bundle --config src-tauri/target/openbook-production-config.json

@@ -8,10 +8,18 @@ paths = [
   '''(^|/)dist/''',
   '''^build/''',
   '''^\.turbo/''',
+  '''^\.convex/''',
   '''^\.pw/''',
   '''^apps/mobile/\.expo/''',
   '''^apps/desktop/src-tauri/target/''',
 ]
+
+[[allowlists]]
+description = "The historical synthetic publication check used a public Clerk test publishable key."
+condition = "AND"
+regexTarget = "line"
+regexes = ['''VITE_CLERK_PUBLISHABLE_KEY=pk_test_''']
+paths = ['''^scripts/verify-web-artifact\.sh$''']
 
 [[rules]]
 id = "curl-auth-user"

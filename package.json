@@ -7,7 +7,7 @@
   "type": "module",
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.13.0 <26"
   },
   "scripts": {
     "dev": "concurrently -n convex,web -c magenta,cyan \"pnpm dev:backend\" \"pnpm dev:web\"",
@@ -18,7 +18,12 @@
     "test": "vitest run",
     "selfhost": "bash scripts/dev-selfhost.sh",
     "verify:live": "node scripts/verify-live.mjs",
-    "verify:publication": "GO111MODULE=off go test ./tools/... && pnpm typecheck && pnpm test && pnpm build && go run ./tools/license-audit/main.go && gitleaks git --no-banner --redact . && gitleaks dir --no-banner --redact .",
+    "verify:production-contract": "GO111MODULE=off go test ./tools/... && GO111MODULE=off go run ./tools/openbookctl targets --json && GO111MODULE=off go run ./tools/openbookctl audit --json",
+    "verify:dependencies": "pnpm audit --audit-level high",
+    "verify:publication": "pnpm verify:production-contract && pnpm verify:dependencies && pnpm typecheck && pnpm test && pnpm build && go run ./tools/license-audit/main.go && gitleaks git --no-banner --redact . && gitleaks dir --no-banner --redact .",
+    "production:readiness": "GO111MODULE=off go run ./tools/openbookctl readiness --online",
+    "production:probe": "GO111MODULE=off go run ./tools/openbookctl probe",
+    "production:load": "GO111MODULE=off go run ./tools/openbookctl load",
     "export:publication": "go run ./tools/publication-export/main.go",
     "go-live-check": "bash scripts/go-live-check.sh",
     "auth:setup": "node node_modules/@convex-dev/auth/dist/cli/index.js"
@@ -31,7 +36,8 @@
     "turbo": "^2.10.11",
     "typescript": "^7.0.2",
     "vite": "8.2.1",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "4.120.0"
   },
   "dependencies": {
     "@auth/core": "^0.41.3",

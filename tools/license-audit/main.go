@@ -18,7 +18,7 @@ type packageInfo struct {
 
 var approved = map[string]bool{
 	"MIT": true, "ISC": true, "Apache-2.0": true,
-	"BSD-3-Clause": true, "0BSD": true,
+	"BSD-2-Clause": true, "BSD-3-Clause": true, "0BSD": true,
 	// web-push / http_ece — Mozilla Public License 2.0 (file-level copyleft).
 	"MPL-2.0": true,
 }

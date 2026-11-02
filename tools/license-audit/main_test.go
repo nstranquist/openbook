@@ -7,9 +7,10 @@ import (
 
 func TestVerifyAcceptsCurrentLicenseFamilies(t *testing.T) {
 	err := verify(map[string][]packageInfo{
-		"MIT":        {{Name: "react", Versions: []string{"19.2.3"}}},
-		"Apache-2.0": {{Name: "convex", Versions: []string{"1.39.0"}}},
-		"MPL-2.0":    {{Name: "web-push", Versions: []string{"3.6.7"}}},
+		"MIT":          {{Name: "react", Versions: []string{"19.2.3"}}},
+		"Apache-2.0":   {{Name: "convex", Versions: []string{"1.39.0"}}},
+		"BSD-2-Clause": {{Name: "glob-to-regexp", Versions: []string{"0.4.1"}}},
+		"MPL-2.0":      {{Name: "web-push", Versions: []string{"3.6.7"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
