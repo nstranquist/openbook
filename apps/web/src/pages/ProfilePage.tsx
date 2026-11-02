@@ -3,7 +3,7 @@ import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { runOrToast } from "../lib/run";
-import { stripImageMetadata, uploadStorageFile } from "../lib/media";
+import { MAX_IMAGE_BYTES, stripImageMetadata, uploadStorageFile } from "../lib/media";
 import { Avatar } from "../components/Avatar";
 import { Composer } from "../components/Composer";
 import { Field } from "../components/Field";
@@ -229,10 +229,15 @@ function AboutCard({ profile }: { profile: { bio?: string; work?: string; locati
 }
 
 function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
-  const albums = useQuery(api.albums.listMine, { userId });
+  const { results: albums, status, loadMore } = usePaginatedQuery(
+    api.albums.listPage,
+    { userId },
+    { initialNumItems: 20 },
+  );
   const create = useMutation(api.albums.create);
   const addPhoto = useMutation(api.albums.addPhoto);
   const generateUploadUrl = useMutation(api.posts.generateUploadUrl);
+  const registerImage = useMutation(api.posts.registerImage);
   return (
     <div className="ob-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <span className="ob-bold" style={{ fontSize: 17 }}>Albums</span>
@@ -248,10 +253,10 @@ function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
           New album
         </button>
       )}
-      {(albums ?? []).length === 0 ? (
+      {albums.length === 0 && status === "Exhausted" ? (
         <div className="ob-empty ob-small">No albums yet.</div>
       ) : (
-        (albums ?? []).map((a) => (
+        albums.map((a) => (
           <div key={a._id} className="ob-row" style={{ gap: 8 }}>
             {a.coverUrls[0] ? (
               <img src={a.coverUrls[0]} alt="" width={48} height={48} style={{ objectFit: "cover", borderRadius: 8 }} />
@@ -273,11 +278,16 @@ function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
                     const file = e.target.files?.[0];
                     e.target.value = "";
                     if (!file) return;
-                    void (async () => {
-                      const prepared = new File([await stripImageMetadata(file)], file.name, { type: file.type });
-                      const imageId = await uploadStorageFile(prepared, generateUploadUrl);
-                      await runOrToast(addPhoto({ albumId: a._id, imageId }), "Could not add photo");
-                    })();
+                    void runOrToast((async () => {
+                      if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) {
+                        throw new Error("Use an image no larger than 5 MB");
+                      }
+                      const blob = await stripImageMetadata(file);
+                      const prepared = new File([blob], file.name, { type: blob.type || file.type });
+                      const { storageId: imageId, grantId } = await uploadStorageFile(prepared, generateUploadUrl, "image");
+                      await registerImage({ storageId: imageId, grantId });
+                      await addPhoto({ albumId: a._id, imageId });
+                    })(), "Could not add photo");
                   }}
                 />
               </label>
@@ -285,26 +295,43 @@ function AlbumsCard({ userId, isMe }: { userId: Id<"users">; isMe: boolean }) {
           </div>
         ))
       )}
+      {status === "CanLoadMore" && (
+        <button className="ob-btn" onClick={() => loadMore(20)}>Load more albums</button>
+      )}
+      {status === "LoadingMore" && <div className="ob-muted ob-small">Loading albums…</div>}
     </div>
   );
 }
 
 function ProfileFriends({ userId }: { userId: Id<"users"> }) {
-  const friends = useQuery(api.friends.list, { userId });
+  const {
+    results: friends,
+    status,
+    loadMore,
+  } = usePaginatedQuery(api.friends.listPage, { userId }, { initialNumItems: 24 });
+  const friendCount = useQuery(api.friends.count, { userId });
   return (
     <div className="ob-card">
-      <span className="ob-bold" style={{ fontSize: 17 }}>Friends</span>
-      {(friends ?? []).length === 0 ? (
+      <span className="ob-bold" style={{ fontSize: 17 }}>
+        Friends{friendCount !== undefined && friendCount !== null ? ` (${friendCount})` : ""}
+      </span>
+      {friends.length === 0 && status === "Exhausted" ? (
         <div className="ob-empty ob-small">No friends to show.</div>
       ) : (
-        <div className="ob-people-grid" style={{ marginTop: 10 }}>
-          {(friends ?? []).map((f) => (
-            <div key={f.userId} className="ob-menu-item" style={{ cursor: "default" }}>
-              <Avatar name={f.displayName} hue={f.avatarHue} size={36} userId={f.userId} />
-              <span className="ob-bold ob-small">{f.displayName}</span>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="ob-people-grid" style={{ marginTop: 10 }}>
+            {friends.map((f) => (
+              <div key={f.userId} className="ob-menu-item" style={{ cursor: "default" }}>
+                <Avatar name={f.displayName} hue={f.avatarHue} size={36} userId={f.userId} />
+                <span className="ob-bold ob-small">{f.displayName}</span>
+              </div>
+            ))}
+          </div>
+          {status === "CanLoadMore" && (
+            <button className="ob-btn" onClick={() => loadMore(24)}>Load more friends</button>
+          )}
+          {status === "LoadingMore" && <div className="ob-muted ob-small">Loading friends…</div>}
+        </>
       )}
     </div>
   );

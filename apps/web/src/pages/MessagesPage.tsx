@@ -16,7 +16,7 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
     { conversationId },
     { initialNumItems: 30 },
   );
-  const conversations = useQuery(api.messages.myConversations);
+  const meta = useQuery(api.messages.conversationSummary, { conversationId });
   const navigate = useNavigate();
   const send = useMutation(api.messages.send);
   const removeMessage = useMutation(api.messages.remove);
@@ -30,7 +30,6 @@ function Thread({ conversationId }: { conversationId: Id<"conversations"> }) {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const meta = conversations?.find((c) => c.conversationId === conversationId);
   // Newest-first from the server; render oldest-first.
   const ordered = useMemo(() => [...results].reverse(), [results]);
 
@@ -192,7 +191,11 @@ function ChatSearch() {
 
 export function MessagesPage() {
   const { conversationId } = useParams<{ conversationId: string }>();
-  const conversations = useQuery(api.messages.myConversations);
+  const {
+    results: conversations,
+    status: conversationStatus,
+    loadMore: loadMoreConversations,
+  } = usePaginatedQuery(api.messages.myConversationsPage, {}, { initialNumItems: 30 });
   const navigate = useNavigate();
 
   return (
@@ -200,12 +203,12 @@ export function MessagesPage() {
       <div className={`ob-msg-side${conversationId ? " hidden-mobile" : ""}`}>
         <div className="ob-menu-head">Chats</div>
         <ChatSearch />
-        {(conversations ?? []).length === 0 && (
+        {conversations.length === 0 && conversationStatus === "Exhausted" && (
           <div className="ob-empty ob-small">
             No conversations yet. Open a friend's profile and hit 💬 Message.
           </div>
         )}
-        {(conversations ?? []).map((c) => (
+        {conversations.map((c) => (
           <button
             key={c.conversationId}
             className={`ob-menu-item${c.conversationId === conversationId ? " unread" : ""}`}
@@ -225,6 +228,14 @@ export function MessagesPage() {
             {c.unreadCount > 0 && <span className="ob-badge-dot" style={{ position: "static" }}>{c.unreadCount}</span>}
           </button>
         ))}
+        {conversationStatus === "CanLoadMore" && (
+          <button className="ob-btn ob-btn--sm" onClick={() => loadMoreConversations(30)}>
+            Load more chats
+          </button>
+        )}
+        {conversationStatus === "LoadingMore" && (
+          <div className="ob-muted ob-small">Loading chats…</div>
+        )}
       </div>
       {conversationId ? (
         <Thread conversationId={conversationId as Id<"conversations">} />

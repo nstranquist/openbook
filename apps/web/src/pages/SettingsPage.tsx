@@ -1,5 +1,5 @@
 import { api, useAuth, type Id } from "@openbook/shared";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { ThemeToggle, toast } from "../ui/garrid";
 import { Avatar } from "../components/Avatar";
@@ -20,7 +20,7 @@ function PushCard() {
       <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
         <div className="g-card-title">Browser notifications</div>
         <div className="g-hint">
-          Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the deployment to enable push.
+          Browser notifications are not enabled for this deployment.
         </div>
       </div>
     );
@@ -58,11 +58,26 @@ function PushCard() {
 
 function PasswordChange() {
   const me = useQuery(api.profiles.me);
-  const { changePassword } = useAuth();
+  const { changePassword, managedExternally, openAccountManagement } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const email = me?.email;
+  if (managedExternally) {
+    return (
+      <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
+        <div className="g-spread">
+          <div>
+            <div className="g-card-title">Sign-in and security</div>
+            <div className="g-hint">Clerk manages your password, passkeys, and multi-factor settings.</div>
+          </div>
+          <button className="g-btn" onClick={() => void openAccountManagement()}>
+            Manage sign-in
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!email) return null;
   const accountEmail = email;
   function submit(event: FormEvent) {
@@ -125,9 +140,13 @@ function PasswordChange() {
 }
 
 function MutedList() {
-  const muted = useQuery(api.mutes.list);
+  const { results: muted, status, loadMore } = usePaginatedQuery(
+    api.mutes.listPage,
+    {},
+    { initialNumItems: 30 },
+  );
   const setMute = useMutation(api.mutes.set);
-  if (!muted || muted.length === 0) return null;
+  if (muted.length === 0 && status === "Exhausted") return null;
   return (
     <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
       <div className="g-card-title">Muted</div>
@@ -146,21 +165,33 @@ function MutedList() {
           </button>
         </div>
       ))}
+      {status === "CanLoadMore" && (
+        <button className="g-btn g-btn--sm" onClick={() => loadMore(30)}>Load more muted people</button>
+      )}
+      {status === "LoadingMore" && <div className="g-hint">Loading muted people…</div>}
     </div>
   );
 }
 
 function OperatorQueue() {
   const me = useQuery(api.profiles.me);
-  const queue = useQuery(api.reports.queue, me?.isOperator ? {} : "skip");
+  const {
+    results: queue,
+    status,
+    loadMore,
+  } = usePaginatedQuery(
+    api.reports.queuePage,
+    me?.isOperator ? {} : "skip",
+    { initialNumItems: 40 },
+  );
   const review = useMutation(api.reports.review);
   if (!me?.isOperator) return null;
   return (
     <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
       <div className="g-card-title">Report queue</div>
       <div className="g-hint">OPERATOR_USER_IDS on the deployment gates this list.</div>
-      {(queue ?? []).length === 0 && <div className="ob-empty ob-small">No open reports.</div>}
-      {(queue ?? []).map((row) => (
+      {queue.length === 0 && status === "Exhausted" && <div className="ob-empty ob-small">No open reports.</div>}
+      {queue.map((row) => (
         <div key={row._id} className="g-spread" style={{ marginTop: "var(--space-3)" }}>
           <span className="ob-small">{row.reason}</span>
           <button className="g-btn g-btn--sm" onClick={() => void runOrToast(review({ id: row._id, status: "closed" }), "Could not close")}>
@@ -168,14 +199,22 @@ function OperatorQueue() {
           </button>
         </div>
       ))}
+      {status === "CanLoadMore" && (
+        <button className="g-btn g-btn--sm" onClick={() => loadMore(40)}>Load more reports</button>
+      )}
+      {status === "LoadingMore" && <div className="g-hint">Loading reports…</div>}
     </div>
   );
 }
 
 function BlockedList() {
-  const blocked = useQuery(api.blocks.list);
+  const { results: blocked, status, loadMore } = usePaginatedQuery(
+    api.blocks.listPage,
+    {},
+    { initialNumItems: 30 },
+  );
   const setBlock = useMutation(api.blocks.set);
-  if (!blocked || blocked.length === 0) return null;
+  if (blocked.length === 0 && status === "Exhausted") return null;
   return (
     <div className="g-card" style={{ marginTop: "var(--space-5)" }}>
       <div className="g-card-title">Blocked</div>
@@ -194,6 +233,10 @@ function BlockedList() {
           </button>
         </div>
       ))}
+      {status === "CanLoadMore" && (
+        <button className="g-btn g-btn--sm" onClick={() => loadMore(30)}>Load more blocked people</button>
+      )}
+      {status === "LoadingMore" && <div className="g-hint">Loading blocked people…</div>}
     </div>
   );
 }

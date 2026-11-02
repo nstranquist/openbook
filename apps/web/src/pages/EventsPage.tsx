@@ -1,11 +1,16 @@
 import { api } from "@openbook/shared";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { type FormEvent, useState } from "react";
 import { Field } from "../components/Field";
 import { runOrToast } from "../lib/run";
 
 export function EventsPage() {
-  const events = useQuery(api.events.upcoming) ?? [];
+  const [anchorAt] = useState(() => Date.now());
+  const { results: events, status, loadMore } = usePaginatedQuery(
+    api.events.upcomingPage,
+    { anchorAt },
+    { initialNumItems: 40 },
+  );
   const create = useMutation(api.events.create);
   const rsvp = useMutation(api.events.rsvp);
   const cancel = useMutation(api.events.cancel);
@@ -90,6 +95,12 @@ export function EventsPage() {
           </div>
         </div>
       ))}
+      {status === "CanLoadMore" && (
+        <button className="ob-btn" onClick={() => loadMore(40)}>Load more events</button>
+      )}
+      {status === "LoadingMore" && (
+        <div className="ob-empty ob-small" aria-live="polite">Loading more events…</div>
+      )}
     </div>
   );
 }

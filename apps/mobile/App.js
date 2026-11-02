@@ -13,14 +13,17 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
-const DEFAULT_URL = "http://127.0.0.1:5173";
+const DEFAULT_URL = __DEV__ ? "http://127.0.0.1:5173" : "";
 const OPENBOOK_URL = process.env.EXPO_PUBLIC_OPENBOOK_URL || DEFAULT_URL;
 const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 
 function parseOpenbookOrigin() {
   try {
     const parsed = new URL(OPENBOOK_URL);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      (!__DEV__ && parsed.protocol !== "https:")
+    ) {
       return null;
     }
     return parsed.origin;
@@ -106,7 +109,12 @@ export default function App() {
         key={reloadKey}
         ref={webViewRef}
         allowsBackForwardNavigationGestures
+        allowFileAccess={false}
+        allowFileAccessFromFileURLs={false}
+        allowUniversalAccessFromFileURLs={false}
         applicationNameForUserAgent="OpenbookMobile/0.1"
+        javaScriptCanOpenWindowsAutomatically={false}
+        mixedContentMode="never"
         onError={({ nativeEvent }) => {
           setLoadError(nativeEvent.description || "Check the server and your connection.");
         }}
@@ -132,7 +140,11 @@ export default function App() {
     )
   ) : (
     <LoadError
-      message="EXPO_PUBLIC_OPENBOOK_URL must be a valid HTTP or HTTPS URL."
+      message={
+        __DEV__
+          ? "EXPO_PUBLIC_OPENBOOK_URL must be a valid HTTP or HTTPS URL."
+          : "A production build requires an HTTPS EXPO_PUBLIC_OPENBOOK_URL."
+      }
     />
   );
 

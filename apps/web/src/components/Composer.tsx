@@ -117,9 +117,18 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                   multiple
                   hidden
                   onChange={(e) => {
-                    const files = [...(e.target.files ?? [])];
+                    const selected = [...(e.target.files ?? [])];
                     e.target.value = "";
-                    if (files.length === 0) return;
+                    if (selected.length === 0) return;
+                    const available = Math.max(0, 4 - imageIds.length);
+                    const files = selected.slice(0, available);
+                    if (files.length === 0) {
+                      setError("A post can contain at most 4 photos");
+                      return;
+                    }
+                    if (selected.length > available) {
+                      setError("Only the first available photos were added (max 4)");
+                    }
                     if (videoPreview) URL.revokeObjectURL(videoPreview);
                     setVideoId(null);
                     setVideoPreview(null);
@@ -136,8 +145,8 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                         try {
                           const blob = await stripImageMetadata(file);
                           const prepared = new File([blob], file.name, { type: blob.type || file.type });
-                          const storageId = await uploadStorageFile(prepared, generateUploadUrl);
-                          await registerImage({ storageId });
+                          const { storageId, grantId } = await uploadStorageFile(prepared, generateUploadUrl, "image");
+                          await registerImage({ storageId, grantId });
                           setImageIds((ids) => [...ids, storageId].slice(0, 4));
                           setPreviews((urls) => [...urls, URL.createObjectURL(file)].slice(0, 4));
                         } catch (err) {
@@ -163,7 +172,7 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                       return;
                     }
                     if (file.size > MAX_VIDEO_BYTES) {
-                      setError("Video too large (max 32 MB)");
+                      setError("Video too large (max 19 MB)");
                       return;
                     }
                     for (const url of previews) URL.revokeObjectURL(url);
@@ -173,8 +182,8 @@ export function Composer({ groupId }: { groupId?: Id<"groups"> }) {
                     setVideoPreview(URL.createObjectURL(file));
                     void (async () => {
                       try {
-                        const storageId = await uploadStorageFile(file, generateUploadUrl);
-                        await registerVideo({ storageId });
+                        const { storageId, grantId } = await uploadStorageFile(file, generateUploadUrl, "video");
+                        await registerVideo({ storageId, grantId });
                         setVideoId(storageId);
                       } catch (err) {
                         setVideoPreview(null);

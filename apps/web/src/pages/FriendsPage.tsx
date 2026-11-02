@@ -1,5 +1,5 @@
 import { api, type Id } from "@openbook/shared";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { Avatar } from "../components/Avatar";
 import { runOrToast } from "../lib/run";
@@ -55,7 +55,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function FriendsPage() {
   const requests = useQuery(api.friends.requests);
   const suggestions = useQuery(api.friends.suggestions);
-  const friends = useQuery(api.friends.list, {});
+  const friendCount = useQuery(api.friends.count, {});
+  const {
+    results: friends,
+    status: friendsStatus,
+    loadMore: loadMoreFriends,
+  } = usePaginatedQuery(api.friends.listPage, {}, { initialNumItems: 24 });
   const accept = useMutation(api.friends.accept);
   const decline = useMutation(api.friends.decline);
   const cancelRequest = useMutation(api.friends.cancelRequest);
@@ -122,24 +127,32 @@ export function FriendsPage() {
           )}
         </Section>
 
-        <Section title={`All Friends${friends ? ` (${friends.length})` : ""}`}>
-          {(friends ?? []).length === 0 ? (
+        <Section title={`All Friends${friendCount !== undefined && friendCount !== null ? ` (${friendCount})` : ""}`}>
+          {friends.length === 0 && friendsStatus === "Exhausted" ? (
             <div className="ob-card ob-empty">No friends yet. Send a request above!</div>
           ) : (
-            <div className="ob-people-grid">
-              {(friends ?? []).map((f) => (
-                <PersonCard key={f.userId} userId={f.userId} displayName={f.displayName} avatarHue={f.avatarHue}>
-                  <button
-                    className="ob-btn ob-btn--sm"
-                    onClick={() => {
-                      if (confirm(`Unfriend ${f.displayName}?`)) void runOrToast(unfriend({ userId: asId(f.userId) }), "Could not unfriend");
-                    }}
-                  >
-                    Unfriend
-                  </button>
-                </PersonCard>
-              ))}
-            </div>
+            <>
+              <div className="ob-people-grid">
+                {friends.map((f) => (
+                  <PersonCard key={f.userId} userId={f.userId} displayName={f.displayName} avatarHue={f.avatarHue}>
+                    <button
+                      className="ob-btn ob-btn--sm"
+                      onClick={() => {
+                        if (confirm(`Unfriend ${f.displayName}?`)) void runOrToast(unfriend({ userId: asId(f.userId) }), "Could not unfriend");
+                      }}
+                    >
+                      Unfriend
+                    </button>
+                  </PersonCard>
+                ))}
+              </div>
+              {friendsStatus === "CanLoadMore" && (
+                <button className="ob-btn" onClick={() => loadMoreFriends(24)}>
+                  Load more friends
+                </button>
+              )}
+              {friendsStatus === "LoadingMore" && <div className="ob-muted ob-small">Loading friends…</div>}
+            </>
           )}
         </Section>
       </div>

@@ -1,4 +1,5 @@
-const CACHE = "openbook-shell-v1";
+const release = new URL(self.location.href).searchParams.get("release") || "dev";
+const CACHE = `openbook-shell-${release.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128)}`;
 const SHELL = ["/", "/openbook.svg", "/favicon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -25,6 +26,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Openbook", {
       body: data.body || "",
+      tag: typeof data.tag === "string" ? data.tag.slice(0, 128) : undefined,
       data: { url: data.url || "/" },
     }),
   );
@@ -32,7 +34,8 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+  const requested = new URL(event.notification.data?.url || "/", self.location.origin);
+  const url = requested.origin === self.location.origin ? requested.href : self.location.origin;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const w of windows) {

@@ -1,21 +1,26 @@
 import { api, useAuth, useSession } from "@openbook/shared";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { SignIn } from "./components/SignIn";
 import { TopNav } from "./components/TopNav";
 import { LeftNav } from "./components/LeftNav";
-import { FeedPage } from "./pages/FeedPage";
-import { FriendsPage } from "./pages/FriendsPage";
-import { MessagesPage } from "./pages/MessagesPage";
-import { PostPage } from "./pages/PostPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { GroupsPage } from "./pages/GroupsPage";
-import { EventsPage } from "./pages/EventsPage";
-import { StatusPage } from "./pages/StatusPage";
-import { SavedPage } from "./pages/SavedPage";
-import { NotificationsPage } from "./pages/NotificationsPage";
+
+const FeedPage = lazy(async () => ({ default: (await import("./pages/FeedPage")).FeedPage }));
+const FriendsPage = lazy(async () => ({ default: (await import("./pages/FriendsPage")).FriendsPage }));
+const MessagesPage = lazy(async () => ({ default: (await import("./pages/MessagesPage")).MessagesPage }));
+const PostPage = lazy(async () => ({ default: (await import("./pages/PostPage")).PostPage }));
+const ProfilePage = lazy(async () => ({ default: (await import("./pages/ProfilePage")).ProfilePage }));
+const SettingsPage = lazy(async () => ({ default: (await import("./pages/SettingsPage")).SettingsPage }));
+const GroupsPage = lazy(async () => ({ default: (await import("./pages/GroupsPage")).GroupsPage }));
+const EventsPage = lazy(async () => ({ default: (await import("./pages/EventsPage")).EventsPage }));
+const StatusPage = lazy(async () => ({ default: (await import("./pages/StatusPage")).StatusPage }));
+const SavedPage = lazy(async () => ({ default: (await import("./pages/SavedPage")).SavedPage }));
+const NotificationsPage = lazy(async () => ({ default: (await import("./pages/NotificationsPage")).NotificationsPage }));
+
+function RouteLoading() {
+  return <div className="ob-empty" aria-busy="true">Loading…</div>;
+}
 
 function ClosedAccount() {
   const { signOut } = useAuth();
@@ -80,10 +85,12 @@ export function App() {
   if (!isAuthenticated) {
     return (
       <main id="main-content" tabIndex={-1}>
-        <Routes>
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="*" element={<SignIn />} />
-        </Routes>
+        <Suspense fallback={<RouteLoading />}>
+          <Routes>
+            <Route path="/status" element={<StatusPage />} />
+            <Route path="*" element={<SignIn />} />
+          </Routes>
+        </Suspense>
       </main>
     );
   }
@@ -97,22 +104,24 @@ export function App() {
           <LeftNav />
           <main id="main-content" className="ob-main" tabIndex={-1}>
             <RouteFocus />
-            <Routes>
-              <Route path="/" element={<FeedPage />} />
-              <Route path="/friends" element={<FriendsPage />} />
-              <Route path="/messages" element={<MessagesPage />} />
-              <Route path="/messages/:conversationId" element={<MessagesPage />} />
-              <Route path="/profile/:userId" element={<ProfilePage />} />
-              <Route path="/post/:postId" element={<PostPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/groups" element={<GroupsPage />} />
-              <Route path="/groups/:groupId" element={<GroupsPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/saved" element={<SavedPage />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/status" element={<StatusPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
+                <Route path="/" element={<FeedPage />} />
+                <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/messages" element={<MessagesPage />} />
+                <Route path="/messages/:conversationId" element={<MessagesPage />} />
+                <Route path="/profile/:userId" element={<ProfilePage />} />
+                <Route path="/post/:postId" element={<PostPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/groups" element={<GroupsPage />} />
+                <Route path="/groups/:groupId" element={<GroupsPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/saved" element={<SavedPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/status" element={<StatusPage />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
       </div>

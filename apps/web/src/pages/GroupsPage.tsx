@@ -1,5 +1,5 @@
 import { api, type Id } from "@openbook/shared";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Composer } from "../components/Composer";
@@ -62,8 +62,16 @@ function CreateGroup() {
 
 function GroupDetail({ groupId }: { groupId: Id<"groups"> }) {
   const group = useQuery(api.groups.get, { groupId });
-  const members = useQuery(api.groups.members, group?.role ? { groupId } : "skip");
-  const feed = useQuery(api.groups.feed, group?.role ? { groupId } : "skip") ?? [];
+  const members = usePaginatedQuery(
+    api.groups.membersPage,
+    group?.role ? { groupId } : "skip",
+    { initialNumItems: 50 },
+  );
+  const feed = usePaginatedQuery(
+    api.groups.feedPage,
+    group?.role ? { groupId } : "skip",
+    { initialNumItems: 20 },
+  );
   const join = useMutation(api.groups.join);
   const leave = useMutation(api.groups.leave);
   const me = useQuery(api.profiles.me);
@@ -91,14 +99,25 @@ function GroupDetail({ groupId }: { groupId: Id<"groups"> }) {
       {group.role && (
         <>
           <Composer groupId={groupId} />
-          {(members ?? []).length > 0 && (
+          {members.results.length > 0 && (
             <div className="ob-card ob-small ob-muted">
-              {(members ?? []).map((m) => m.displayName).join(" · ")}
+              {members.results.map((member) => member.displayName).join(" · ")}
+              {members.status === "CanLoadMore" && (
+                <button className="ob-btn ob-btn--sm" onClick={() => members.loadMore(50)}>
+                  Load more members
+                </button>
+              )}
             </div>
           )}
-          {feed.map((post) => (
+          {feed.results.map((post) => (
             <PostCard key={post._id} post={post as EnrichedPost} isMine={post.author.userId === me?.userId} />
           ))}
+          {feed.status === "CanLoadMore" && (
+            <button className="ob-btn" onClick={() => feed.loadMore(20)}>Load more posts</button>
+          )}
+          {feed.status === "LoadingMore" && (
+            <div className="ob-empty ob-small" aria-live="polite">Loading more posts…</div>
+          )}
         </>
       )}
     </div>
@@ -107,28 +126,34 @@ function GroupDetail({ groupId }: { groupId: Id<"groups"> }) {
 
 export function GroupsPage() {
   const { groupId } = useParams<{ groupId: string }>();
-  const mine = useQuery(api.groups.list) ?? [];
-  const discover = useQuery(api.groups.discover) ?? [];
+  const mine = usePaginatedQuery(api.groups.listPage, groupId ? "skip" : {}, { initialNumItems: 30 });
+  const discover = usePaginatedQuery(api.groups.discoverPage, groupId ? "skip" : {}, { initialNumItems: 30 });
   if (groupId) return <GroupDetail groupId={groupId as Id<"groups">} />;
   return (
     <div className="ob-stack" style={{ maxWidth: 680, margin: "16px auto" }}>
       <h1>Groups</h1>
       <CreateGroup />
-      {mine.map((g) => (
+      {mine.results.map((g) => (
         <Link key={g._id} to={`/groups/${g._id}`} className="ob-card ob-link">
           <div className="ob-bold">{g.name}</div>
           <div className="ob-muted ob-small">{g.kind} · {g.role}</div>
         </Link>
       ))}
-      {discover.length > 0 && (
+      {mine.status === "CanLoadMore" && (
+        <button className="ob-btn" onClick={() => mine.loadMore(30)}>Load more groups</button>
+      )}
+      {discover.results.length > 0 && (
         <>
           <h2 className="ob-muted" style={{ fontSize: 15 }}>Discover</h2>
-          {discover.map((g) => (
+          {discover.results.map((g) => (
             <Link key={g._id} to={`/groups/${g._id}`} className="ob-card ob-link">
               <div className="ob-bold">{g.name}</div>
               <div className="ob-muted ob-small">{g.kind}</div>
             </Link>
           ))}
+          {discover.status === "CanLoadMore" && (
+            <button className="ob-btn" onClick={() => discover.loadMore(30)}>Discover more groups</button>
+          )}
         </>
       )}
     </div>

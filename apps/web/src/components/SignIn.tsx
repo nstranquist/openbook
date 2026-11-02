@@ -1,14 +1,26 @@
 import { useAuth } from "@openbook/shared";
-import { type FormEvent, useRef, useState } from "react";
+import { lazy, Suspense, type FormEvent, useRef, useState } from "react";
 import { BrandMark } from "./BrandMark";
 import { Field } from "./Field";
 import { devIdentity, isDevLoginAvailable, useDevAutoLogin } from "../lib/devAutoLogin";
 import { clearSavedLogin, loadSavedLogin, saveLogin } from "../lib/savedLogin";
+import { usesClerk } from "../lib/authProviders";
+
+const ClerkSignIn = lazy(async () => {
+  const module = await import("./ClerkSignIn");
+  return { default: module.ClerkSignIn };
+});
 
 // Split landing: brand statement left, auth card right. Sign-up captures the
 // display name; it's handed to profiles.ensure right after the first
 // authenticated render (see App.tsx EnsureProfile).
 export function SignIn() {
+  return usesClerk()
+    ? <Suspense fallback={<div className="ob-landing" aria-busy="true">Loading sign-in…</div>}><ClerkSignIn /></Suspense>
+    : <LocalSignIn />;
+}
+
+function LocalSignIn() {
   const { signIn, signUp, signInWith, requestPasswordReset, confirmPasswordReset } = useAuth();
   const saved = useRef(loadSavedLogin()).current;
   const [name, setName] = useState("");

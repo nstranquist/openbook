@@ -12,7 +12,8 @@ EXPO_PUBLIC_OPENBOOK_URL=http://127.0.0.1:5173 npx expo start
 ```
 
 On a device, point `EXPO_PUBLIC_OPENBOOK_URL` at a machine-reachable origin
-(not localhost). The URL must use HTTP or HTTPS.
+(not localhost). Development accepts HTTP. Production builds fail closed unless
+the value is an HTTPS origin.
 
 Run the supported-SDK and native-bundle checks before a release:
 

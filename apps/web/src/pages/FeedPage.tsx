@@ -124,16 +124,19 @@ function StoriesStrip() {
               const file = e.target.files?.[0];
               e.target.value = "";
               if (!file) return;
-              if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) return;
+              if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) {
+                void runOrToast(Promise.reject(new Error("Use an image no larger than 5 MB")), "Could not upload story photo");
+                return;
+              }
               if (preview) URL.revokeObjectURL(preview);
               setPreview(URL.createObjectURL(file));
-              void (async () => {
+              void runOrToast((async () => {
                 const blob = await stripImageMetadata(file);
                 const prepared = new File([blob], file.name, { type: blob.type || file.type });
-                const storageId = await uploadStorageFile(prepared, generateUploadUrl);
-                await registerImage({ storageId });
+                const { storageId, grantId } = await uploadStorageFile(prepared, generateUploadUrl, "image");
+                await registerImage({ storageId, grantId });
                 setImageId(storageId);
-              })();
+              })(), "Could not upload story photo");
             }}
           />
         </label>

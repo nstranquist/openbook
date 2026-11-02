@@ -2,8 +2,7 @@ import { api } from "@openbook/shared";
 import { useAction, useQuery } from "convex/react";
 import { useState } from "react";
 
-// Plan + usage, with Stripe TEST checkout when keys are configured on the
-// deployment. Rendered from Settings so the free-tier post cap is visible.
+// Plan and usage. The backend is authoritative about whether billing is enabled.
 export function BillingPanel() {
   const plan = useQuery(api.billing.getMyPlan, {});
   const createCheckout = useAction(api.billing.createCheckout);
@@ -40,7 +39,8 @@ export function BillingPanel() {
         Posts: {usage} / {postLimit ?? "unlimited"}
         {plan?.status && current !== "free" ? ` · ${plan.status}` : ""}
       </p>
-      <div className="g-row" style={{ justifyContent: "flex-end", marginTop: "var(--space-3)" }}>
+      {!plan?.billingEnabled && <p className="g-hint">Billing is not enabled for this deployment.</p>}
+      {plan?.billingEnabled && <div className="g-row" style={{ justifyContent: "flex-end", marginTop: "var(--space-3)" }}>
         {!isPaid ? (
           <button
             type="button"
@@ -67,7 +67,7 @@ export function BillingPanel() {
             Manage billing
           </button>
         )}
-      </div>
+      </div>}
       {error && (
         <p className="ob-small" style={{ color: "var(--danger)", marginTop: "var(--space-3)" }}>
           {error}

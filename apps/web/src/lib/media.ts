@@ -1,7 +1,7 @@
 import type { Id } from "@openbook/shared";
 
 export const MAX_IMAGE_BYTES = 5_000_000;
-export const MAX_VIDEO_BYTES = 32_000_000;
+export const MAX_VIDEO_BYTES = 19_000_000;
 
 // Re-encode still images on a canvas so EXIF / GPS / camera tags do not
 // leave the device. GIFs keep the original bytes (canvas would flatten them).
@@ -24,14 +24,19 @@ export async function stripImageMetadata(file: File): Promise<Blob> {
 
 export async function uploadStorageFile(
   file: File,
-  generateUploadUrl: () => Promise<string>,
-): Promise<Id<"_storage">> {
-  const res = await fetch(await generateUploadUrl(), {
+  generateUploadUrl: (args: {
+    kind: "image" | "video";
+    declaredBytes: number;
+  }) => Promise<{ uploadUrl: string; grantId: Id<"uploadGrants"> }>,
+  kind: "image" | "video",
+): Promise<{ storageId: Id<"_storage">; grantId: Id<"uploadGrants"> }> {
+  const grant = await generateUploadUrl({ kind, declaredBytes: file.size });
+  const res = await fetch(grant.uploadUrl, {
     method: "POST",
     headers: { "Content-Type": file.type || "application/octet-stream" },
     body: file,
   });
   if (!res.ok) throw new Error("Upload failed");
   const json = (await res.json()) as { storageId: Id<"_storage"> };
-  return json.storageId;
+  return { storageId: json.storageId, grantId: grant.grantId };
 }
